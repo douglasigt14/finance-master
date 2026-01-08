@@ -21,7 +21,7 @@
                         <select class="form-select @error('type') is-invalid @enderror" id="type" name="type" required>
                             <option value="">Selecione o tipo</option>
                             <option value="INCOME" {{ old('type', request('type')) === 'INCOME' ? 'selected' : '' }}>Entrada</option>
-                            <option value="EXPENSE" {{ old('type', request('type')) === 'EXPENSE' ? 'selected' : '' }}>Saída</option>
+                            <option value="EXPENSE" {{ old('type', request('type', 'EXPENSE')) === 'EXPENSE' ? 'selected' : '' }}>Saída</option>
                         </select>
                         @error('type')
                             <div class="invalid-feedback">{{ $message }}</div>
@@ -241,19 +241,23 @@ document.addEventListener('DOMContentLoaded', function() {
     amountInput.addEventListener('input', updateInstallmentsPreview);
     transactionDateInput.addEventListener('change', updateInstallmentsPreview);
 
-    // Initial visibility update
-    updateFormVisibility();
-    
     // Pre-fill form from query parameters
     const urlParams = new URLSearchParams(window.location.search);
     const typeParam = urlParams.get('type');
     const paymentMethodParam = urlParams.get('payment_method');
     const cardIdParam = urlParams.get('card_id');
     
+    // Set default type to EXPENSE if not set
+    if (!typeSelect.value && !typeParam) {
+        typeSelect.value = 'EXPENSE';
+    }
+    
     if (typeParam && typeSelect.value !== typeParam) {
         typeSelect.value = typeParam;
-        updateFormVisibility();
     }
+    
+    // Initial visibility update
+    updateFormVisibility();
     
     if (paymentMethodParam && paymentMethodSelect.value !== paymentMethodParam) {
         paymentMethodSelect.value = paymentMethodParam;
