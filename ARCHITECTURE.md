@@ -192,4 +192,3 @@ Category (1) -> (N) Transaction
 4. **is_paid na Transaction**: Permite marcar parcelas individuais como pagas, útil para controle fino.
 
 5. **is_paid na Invoice**: Permite marcar a fatura inteira como paga, simplificando o controle.
-
