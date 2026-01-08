@@ -86,13 +86,6 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Transações</h5>
         <div>
-            <form action="{{ route('invoices.recalculate', [$card->id, $invoice->cycle_month, $invoice->cycle_year]) }}" 
-                  method="POST" class="d-inline">
-                @csrf
-                <button type="submit" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-arrow-clockwise"></i> Recalcular
-                </button>
-            </form>
             @if(!$invoice->is_paid)
                 <form action="{{ route('invoices.mark-paid', [$card->id, $invoice->cycle_month, $invoice->cycle_year]) }}" 
                       method="POST" class="d-inline">

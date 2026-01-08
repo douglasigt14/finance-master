@@ -13,6 +13,8 @@ class CreateTransactionDTO
         public readonly ?int $cardId = null,
         public readonly ?string $paymentMethod = null,
         public readonly ?string $description = null,
+        public readonly ?string $cardDescription = null,
+        public readonly ?int $debtorId = null,
         public readonly int $installmentsTotal = 1,
     ) {
     }
@@ -28,6 +30,8 @@ class CreateTransactionDTO
             cardId: $data['card_id'] ?? null,
             paymentMethod: $data['payment_method'] ?? null,
             description: $data['description'] ?? null,
+            cardDescription: $data['card_description'] ?? null,
+            debtorId: isset($data['debtor_id']) && $data['debtor_id'] ? (int) $data['debtor_id'] : null,
             installmentsTotal: (int) ($data['installments_total'] ?? 1),
         );
     }
@@ -43,6 +47,8 @@ class CreateTransactionDTO
             'card_id' => $this->cardId,
             'payment_method' => $this->paymentMethod,
             'description' => $this->description,
+            'card_description' => $this->cardDescription,
+            'debtor_id' => $this->debtorId,
             'installments_total' => $this->installmentsTotal,
         ];
     }

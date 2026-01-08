@@ -19,10 +19,12 @@ class Transaction extends Model
         'user_id',
         'category_id',
         'card_id',
+        'debtor_id',
         'type',
         'payment_method',
         'amount',
         'description',
+        'card_description',
         'transaction_date',
         'installments_total',
         'installment_number',
@@ -66,6 +68,14 @@ class Transaction extends Model
     public function card(): BelongsTo
     {
         return $this->belongsTo(Card::class);
+    }
+
+    /**
+     * Get the debtor that owns the transaction.
+     */
+    public function debtor(): BelongsTo
+    {
+        return $this->belongsTo(Debtor::class);
     }
 
     /**

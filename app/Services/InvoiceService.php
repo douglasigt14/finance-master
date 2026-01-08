@@ -111,13 +111,36 @@ class InvoiceService
     }
 
     /**
-     * Get invoices for a card
+     * Get invoices for a card (including future invoices up to 3 months ahead)
      */
     public function getInvoicesByCard(Card $card): Collection
     {
+        $now = Carbon::now();
+        $currentMonth = $now->month;
+        $currentYear = $now->year;
+
+        // Determine current cycle
+        if ($now->day < $card->closing_day) {
+            $currentMonth = $now->copy()->subMonth()->month;
+            $currentYear = $now->copy()->subMonth()->year;
+        }
+
+        // Ensure current invoice exists
+        $this->getOrCreateInvoice($card, $currentMonth, $currentYear);
+
+        // Create future invoices (next 3 months from current cycle)
+        $baseDate = Carbon::create($currentYear, $currentMonth, 1);
+        for ($i = 1; $i <= 3; $i++) {
+            $futureDate = $baseDate->copy()->addMonths($i);
+            $futureMonth = $futureDate->month;
+            $futureYear = $futureDate->year;
+            $this->getOrCreateInvoice($card, $futureMonth, $futureYear);
+        }
+
+        // Return all invoices ordered by date (oldest first)
         return Invoice::where('card_id', $card->id)
-            ->orderBy('cycle_year', 'desc')
-            ->orderBy('cycle_month', 'desc')
+            ->orderBy('cycle_year', 'asc')
+            ->orderBy('cycle_month', 'asc')
             ->get();
     }
 

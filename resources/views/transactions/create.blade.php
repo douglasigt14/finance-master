@@ -124,6 +124,34 @@
                         @enderror
                     </div>
 
+                    <div class="mb-3" id="cardDescriptionGroup" style="display: none;">
+                        <label for="card_description" class="form-label">Descrição no Cartão</label>
+                        <input type="text" class="form-control @error('card_description') is-invalid @enderror" 
+                               id="card_description" name="card_description" 
+                               value="{{ old('card_description') }}" 
+                               placeholder="Ex: LOJA X JS">
+                        <small class="form-text text-muted">Descrição exata como aparece no cartão de crédito</small>
+                        @error('card_description')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="debtor_id" class="form-label">Cobrar de (Devedor)</label>
+                        <select class="form-select @error('debtor_id') is-invalid @enderror" id="debtor_id" name="debtor_id">
+                            <option value="">Nenhum</option>
+                            @foreach($debtors as $debtor)
+                                <option value="{{ $debtor->id }}" {{ old('debtor_id') == $debtor->id ? 'selected' : '' }}>
+                                    {{ $debtor->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <small class="form-text text-muted">Selecione se emprestou o cartão para alguém</small>
+                        @error('debtor_id')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
                     <div class="d-flex justify-content-between">
                         <a href="{{ route('transactions.index') }}" class="btn btn-secondary">
                             <i class="bi bi-arrow-left"></i> Cancelar
@@ -147,6 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const paymentMethodGroup = document.getElementById('paymentMethodGroup');
     const paymentMethodSelect = document.getElementById('payment_method');
     const cardGroup = document.getElementById('cardGroup');
+    const cardDescriptionGroup = document.getElementById('cardDescriptionGroup');
     const installmentsGroup = document.getElementById('installmentsGroup');
     const installmentsPreview = document.getElementById('installmentsPreview');
     const installmentsTotalInput = document.getElementById('installments_total');
@@ -166,8 +195,9 @@ document.addEventListener('DOMContentLoaded', function() {
             paymentMethodSelect.value = '';
         }
 
-        // Show card and installments for credit
+        // Show card, card description and installments for credit
         cardGroup.style.display = isCredit ? 'block' : 'none';
+        cardDescriptionGroup.style.display = isCredit ? 'block' : 'none';
         installmentsGroup.style.display = isCredit ? 'block' : 'none';
         
         if (!isCredit) {

@@ -95,6 +95,7 @@
                             <th>Forma de Pagamento</th>
                             <th>Valor</th>
                             <th>Parcelas</th>
+                            <th>Devedor</th>
                             <th>Status</th>
                             <th>Ações</th>
                         </tr>
@@ -136,6 +137,13 @@
                                         <span class="badge bg-secondary">
                                             {{ $transaction->installment_number }}/{{ $transaction->installments_total }}
                                         </span>
+                                    @else
+                                        -
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($transaction->debtor)
+                                        <span class="badge bg-warning">{{ $transaction->debtor->name }}</span>
                                     @else
                                         -
                                     @endif

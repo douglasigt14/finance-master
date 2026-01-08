@@ -106,6 +106,34 @@
                     </div>
 
                     <div class="mb-3">
+                        <label for="card_description" class="form-label">Descrição no Cartão</label>
+                        <input type="text" class="form-control @error('card_description') is-invalid @enderror" 
+                               id="card_description" name="card_description" 
+                               value="{{ old('card_description', $transaction->card_description) }}" 
+                               placeholder="Ex: LOJA X JS">
+                        <small class="form-text text-muted">Descrição exata como aparece no cartão de crédito</small>
+                        @error('card_description')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="debtor_id" class="form-label">Cobrar de (Devedor)</label>
+                        <select class="form-select @error('debtor_id') is-invalid @enderror" id="debtor_id" name="debtor_id">
+                            <option value="">Nenhum</option>
+                            @foreach($debtors as $debtor)
+                                <option value="{{ $debtor->id }}" {{ old('debtor_id', $transaction->debtor_id) == $debtor->id ? 'selected' : '' }}>
+                                    {{ $debtor->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <small class="form-text text-muted">Selecione se emprestou o cartão para alguém</small>
+                        @error('debtor_id')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="mb-3">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="is_paid" name="is_paid" 
                                    {{ old('is_paid', $transaction->is_paid) ? 'checked' : '' }}>

@@ -29,8 +29,9 @@ class TransactionsController extends Controller
         // Get filters data
         $categories = Category::where('user_id', $request->user()->id)->orderBy('name')->get();
         $cards = Card::where('user_id', $request->user()->id)->active()->orderBy('name')->get();
+        $debtors = \App\Models\Debtor::where('user_id', $request->user()->id)->orderBy('name')->get();
 
-        return view('transactions.index', compact('transactions', 'categories', 'cards', 'filters'));
+        return view('transactions.index', compact('transactions', 'categories', 'cards', 'debtors', 'filters'));
     }
 
     /**
@@ -40,8 +41,9 @@ class TransactionsController extends Controller
     {
         $categories = Category::where('user_id', $request->user()->id)->orderBy('name')->get();
         $cards = Card::where('user_id', $request->user()->id)->active()->orderBy('name')->get();
+        $debtors = \App\Models\Debtor::where('user_id', $request->user()->id)->orderBy('name')->get();
 
-        return view('transactions.create', compact('categories', 'cards'));
+        return view('transactions.create', compact('categories', 'cards', 'debtors'));
     }
 
     /**
@@ -99,8 +101,9 @@ class TransactionsController extends Controller
 
         $categories = Category::where('user_id', $request->user()->id)->orderBy('name')->get();
         $cards = Card::where('user_id', $request->user()->id)->active()->orderBy('name')->get();
+        $debtors = \App\Models\Debtor::where('user_id', $request->user()->id)->orderBy('name')->get();
 
-        return view('transactions.edit', compact('transaction', 'categories', 'cards'));
+        return view('transactions.edit', compact('transaction', 'categories', 'cards', 'debtors'));
     }
 
     /**

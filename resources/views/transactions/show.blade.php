@@ -96,6 +96,20 @@
                         <td>{{ $transaction->description }}</td>
                     </tr>
                     @endif
+                    @if($transaction->card_description)
+                    <tr>
+                        <th>Descrição no Cartão:</th>
+                        <td>{{ $transaction->card_description }}</td>
+                    </tr>
+                    @endif
+                    @if($transaction->debtor)
+                    <tr>
+                        <th>Cobrar de:</th>
+                        <td>
+                            <span class="badge bg-info">{{ $transaction->debtor->name }}</span>
+                        </td>
+                    </tr>
+                    @endif
                 </table>
             </div>
         </div>

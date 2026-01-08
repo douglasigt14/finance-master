@@ -44,6 +44,8 @@ class StoreTransactionRequest extends FormRequest
                 }),
             ],
             'description' => ['nullable', 'string', 'max:1000'],
+            'card_description' => ['nullable', 'string', 'max:1000'],
+            'debtor_id' => ['nullable', 'integer', 'exists:debtors,id'],
             'installments_total' => [
                 'nullable',
                 'integer',

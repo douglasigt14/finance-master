@@ -77,4 +77,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(Invoice::class);
     }
+
+    /**
+     * Get the debtors for the user.
+     */
+    public function debtors()
+    {
+        return $this->hasMany(Debtor::class);
+    }
 }

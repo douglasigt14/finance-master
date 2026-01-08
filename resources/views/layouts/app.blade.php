@@ -37,6 +37,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ route('debtors.index') }}">
+                            <i class="bi bi-person-badge"></i> Devedores
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{{ route('transactions.index') }}">
                             <i class="bi bi-arrow-left-right"></i> Transações
                         </a>

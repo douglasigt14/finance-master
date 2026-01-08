@@ -103,8 +103,14 @@
 
 <!-- Invoice History -->
 <div class="card">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Histórico de Faturas</h5>
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="showPaidInvoices" onchange="togglePaidInvoices()">
+            <label class="form-check-label" for="showPaidInvoices">
+                Mostrar faturas pagas
+            </label>
+        </div>
     </div>
     <div class="card-body">
         @if($invoices->isEmpty())
@@ -120,13 +126,23 @@
                             <th>Valor Total</th>
                             <th>Valor Pago</th>
                             <th>Status</th>
-                            <th>Ações</th>
+                            <th colspan="2" style="text-align: center;">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach($invoices as $invoice)
-                            <tr>
-                                <td>{{ $invoice->cycle_month }}/{{ $invoice->cycle_year }}</td>
+                            @php
+                                $closingDate = \Carbon\Carbon::parse($invoice->closing_date);
+                                $isFuture = $closingDate->isFuture();
+                            @endphp
+                            <tr class="{{ $isFuture ? 'table-info' : '' }} {{ $invoice->is_paid ? 'invoice-paid' : '' }}" 
+                                style="{{ $invoice->is_paid ? 'display: none;' : '' }}">
+                                <td>
+                                    {{ $invoice->cycle_month }}/{{ $invoice->cycle_year }}
+                                    @if($isFuture)
+                                        <span class="badge bg-info ms-1">Futura</span>
+                                    @endif
+                                </td>
                                 <td>{{ \Carbon\Carbon::parse($invoice->closing_date)->format('d/m/Y') }}</td>
                                 <td>{{ \Carbon\Carbon::parse($invoice->due_date)->format('d/m/Y') }}</td>
                                 <td>R$ {{ number_format($invoice->total_amount, 2, ',', '.') }}</td>
@@ -144,6 +160,27 @@
                                         <i class="bi bi-eye"></i> Ver
                                     </a>
                                 </td>
+                                <td>
+                                    @if(!$invoice->is_paid)
+                                        <form action="{{ route('invoices.mark-paid', [$selectedCard->id, $invoice->cycle_month, $invoice->cycle_year]) }}" 
+                                              method="POST" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-success" 
+                                                    >
+                                                <i class="bi bi-check-circle"></i>
+                                            </button>
+                                        </form>
+                                    @else
+                                        <form action="{{ route('invoices.mark-unpaid', [$selectedCard->id, $invoice->cycle_month, $invoice->cycle_year]) }}" 
+                                              method="POST" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-warning" 
+                                                    >
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        </form>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -153,3 +190,28 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+function togglePaidInvoices() {
+    const checkbox = document.getElementById('showPaidInvoices');
+    const paidInvoices = document.querySelectorAll('.invoice-paid');
+    
+    paidInvoices.forEach(function(row) {
+        if (checkbox.checked) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Initialize: hide paid invoices by default
+document.addEventListener('DOMContentLoaded', function() {
+    const checkbox = document.getElementById('showPaidInvoices');
+    if (checkbox && !checkbox.checked) {
+        togglePaidInvoices();
+    }
+});
+</script>
+@endpush

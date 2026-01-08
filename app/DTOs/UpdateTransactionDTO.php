@@ -12,6 +12,8 @@ class UpdateTransactionDTO
         public readonly ?int $cardId = null,
         public readonly ?string $paymentMethod = null,
         public readonly ?string $description = null,
+        public readonly ?string $cardDescription = null,
+        public readonly ?int $debtorId = null,
         public readonly ?bool $isPaid = null,
     ) {
     }
@@ -26,6 +28,8 @@ class UpdateTransactionDTO
             cardId: isset($data['card_id']) ? (int) $data['card_id'] : null,
             paymentMethod: $data['payment_method'] ?? null,
             description: $data['description'] ?? null,
+            cardDescription: $data['card_description'] ?? null,
+            debtorId: isset($data['debtor_id']) && $data['debtor_id'] ? (int) $data['debtor_id'] : null,
             isPaid: isset($data['is_paid']) ? (bool) $data['is_paid'] : null,
         );
     }
@@ -54,6 +58,12 @@ class UpdateTransactionDTO
         }
         if ($this->description !== null) {
             $array['description'] = $this->description;
+        }
+        if ($this->cardDescription !== null) {
+            $array['card_description'] = $this->cardDescription;
+        }
+        if ($this->debtorId !== null) {
+            $array['debtor_id'] = $this->debtorId;
         }
         if ($this->isPaid !== null) {
             $array['is_paid'] = $this->isPaid;

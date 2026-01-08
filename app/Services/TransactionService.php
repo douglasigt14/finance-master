@@ -4,17 +4,23 @@ namespace App\Services;
 
 use App\DTOs\CreateTransactionDTO;
 use App\DTOs\UpdateTransactionDTO;
+use App\Models\Card;
 use App\Models\Transaction;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class TransactionService
 {
+    public function __construct(
+        private InvoiceService $invoiceService
+    ) {
+    }
     public function getAllByUser(int $userId, array $filters = []): Collection
     {
         $query = Transaction::where('user_id', $userId)
-            ->with(['category', 'card'])
+            ->with(['category', 'card', 'debtor'])
             ->orderBy('transaction_date', 'desc')
             ->orderBy('created_at', 'desc');
 
@@ -49,7 +55,7 @@ class TransactionService
     {
         return Transaction::where('id', $transactionId)
             ->where('user_id', $userId)
-            ->with(['category', 'card'])
+            ->with(['category', 'card', 'debtor'])
             ->first();
     }
 
@@ -58,24 +64,36 @@ class TransactionService
         return DB::transaction(function () use ($dto) {
             // If it's a credit card transaction with installments, create multiple transactions
             if ($dto->paymentMethod === 'CREDIT' && $dto->installmentsTotal > 1) {
-                return $this->createInstallments($dto);
+                $result = $this->createInstallments($dto);
+                // Recalculate affected invoices
+                $this->recalculateAffectedInvoices($dto->cardId, $result);
+                return $result;
             }
 
             // Single transaction
-            return Transaction::create([
+            $transaction = Transaction::create([
                 'user_id' => $dto->userId,
                 'category_id' => $dto->categoryId,
                 'card_id' => $dto->cardId,
+                'debtor_id' => $dto->debtorId,
                 'type' => $dto->type,
                 'payment_method' => $dto->paymentMethod,
                 'amount' => $dto->amount,
                 'description' => $dto->description,
+                'card_description' => $dto->cardDescription,
                 'transaction_date' => $dto->transactionDate,
                 'installments_total' => $dto->installmentsTotal,
                 'installment_number' => 1,
                 'group_uuid' => null,
                 'is_paid' => false,
             ]);
+
+            // Recalculate affected invoice if it's a credit transaction
+            if ($dto->paymentMethod === 'CREDIT' && $dto->cardId) {
+                $this->recalculateInvoiceForTransaction($transaction);
+            }
+
+            return $transaction;
         });
     }
 
@@ -83,9 +101,30 @@ class TransactionService
     {
         $groupUuid = Str::uuid()->toString();
         $installmentAmount = $dto->amount / $dto->installmentsTotal;
-        $transactions = collect();
+        $transactions = new Collection();
 
-        $transactionDate = \Carbon\Carbon::parse($dto->transactionDate);
+        $transactionDate = Carbon::parse($dto->transactionDate);
+        $card = Card::find($dto->cardId);
+
+        // Ensure future invoices exist for all installments based on their actual dates
+        if ($card) {
+            // Create invoices for each installment date
+            for ($i = 1; $i <= $dto->installmentsTotal; $i++) {
+                $installmentDate = $transactionDate->copy()->addMonths($i - 1);
+                $month = $installmentDate->month;
+                $year = $installmentDate->year;
+
+                // Determine which cycle this installment belongs to
+                if ($installmentDate->day < $card->closing_day) {
+                    // Installment is in the previous cycle
+                    $month = $installmentDate->copy()->subMonth()->month;
+                    $year = $installmentDate->copy()->subMonth()->year;
+                }
+
+                // Create invoice for this cycle if it doesn't exist
+                $this->invoiceService->getOrCreateInvoice($card, $month, $year);
+            }
+        }
 
         for ($i = 1; $i <= $dto->installmentsTotal; $i++) {
             $installmentDate = $transactionDate->copy()->addMonths($i - 1);
@@ -94,10 +133,12 @@ class TransactionService
                 'user_id' => $dto->userId,
                 'category_id' => $dto->categoryId,
                 'card_id' => $dto->cardId,
+                'debtor_id' => $dto->debtorId,
                 'type' => $dto->type,
                 'payment_method' => $dto->paymentMethod,
                 'amount' => $installmentAmount,
                 'description' => $dto->description . ' - Parcela ' . $i . '/' . $dto->installmentsTotal,
+                'card_description' => $dto->cardDescription,
                 'transaction_date' => $installmentDate->format('Y-m-d'),
                 'installments_total' => $dto->installmentsTotal,
                 'installment_number' => $i,
@@ -113,23 +154,77 @@ class TransactionService
 
     public function update(Transaction $transaction, UpdateTransactionDTO $dto): Transaction
     {
+        $oldCardId = $transaction->card_id;
+        $oldDate = $transaction->transaction_date;
+        $oldPaymentMethod = $transaction->payment_method;
+
         $transaction->update($dto->toArray());
-        return $transaction->fresh()->load(['category', 'card']);
+        $updated = $transaction->fresh()->load(['category', 'card', 'debtor']);
+
+        // Recalculate invoices if it's a credit transaction
+        if ($updated->payment_method === 'CREDIT' && $updated->card_id) {
+            $this->recalculateInvoiceForTransaction($updated);
+            
+            // Also recalculate old invoice if card or date changed
+            if ($oldCardId && ($oldCardId != $updated->card_id || $oldDate != $updated->transaction_date)) {
+                $oldCard = Card::find($oldCardId);
+                if ($oldCard) {
+                    $oldDateCarbon = Carbon::parse($oldDate);
+                    $this->recalculateInvoiceForDate($oldCard, $oldDateCarbon);
+                }
+            }
+        } elseif ($oldPaymentMethod === 'CREDIT' && $oldCardId) {
+            // Transaction was changed from credit to something else, recalculate old invoice
+            $oldCard = Card::find($oldCardId);
+            if ($oldCard) {
+                $oldDateCarbon = Carbon::parse($oldDate);
+                $this->recalculateInvoiceForDate($oldCard, $oldDateCarbon);
+            }
+        }
+
+        return $updated;
     }
 
     public function delete(Transaction $transaction): bool
     {
+        $cardId = $transaction->card_id;
+        $transactionDate = $transaction->transaction_date;
+        $paymentMethod = $transaction->payment_method;
+
         // If it's part of an installment group, delete all installments
         if ($transaction->group_uuid) {
-            return DB::transaction(function () use ($transaction) {
+            return DB::transaction(function () use ($transaction, $cardId, $paymentMethod) {
+                // Get all transactions in the group before deleting
+                $groupTransactions = Transaction::where('group_uuid', $transaction->group_uuid)
+                    ->where('user_id', $transaction->user_id)
+                    ->get();
+                
+                // Delete all transactions
                 Transaction::where('group_uuid', $transaction->group_uuid)
                     ->where('user_id', $transaction->user_id)
                     ->delete();
+                
+                // Recalculate affected invoices
+                if ($paymentMethod === 'CREDIT' && $cardId) {
+                    $this->recalculateAffectedInvoices($cardId, $groupTransactions);
+                }
+                
                 return true;
             });
         }
 
-        return $transaction->delete();
+        $deleted = $transaction->delete();
+        
+        // Recalculate invoice if it was a credit transaction
+        if ($paymentMethod === 'CREDIT' && $cardId) {
+            $card = Card::find($cardId);
+            if ($card) {
+                $dateCarbon = Carbon::parse($transactionDate);
+                $this->recalculateInvoiceForDate($card, $dateCarbon);
+            }
+        }
+
+        return $deleted;
     }
 
     public function markAsPaid(Transaction $transaction): Transaction
@@ -150,5 +245,76 @@ class TransactionService
             ->where('user_id', $userId)
             ->orderBy('installment_number')
             ->get();
+    }
+
+    /**
+     * Recalculate invoice for a specific transaction
+     */
+    private function recalculateInvoiceForTransaction(Transaction $transaction): void
+    {
+        if (!$transaction->card_id) {
+            return;
+        }
+
+        $card = $transaction->card;
+        $dateCarbon = Carbon::parse($transaction->transaction_date);
+        $this->recalculateInvoiceForDate($card, $dateCarbon);
+    }
+
+    /**
+     * Recalculate invoice for a specific date
+     */
+    private function recalculateInvoiceForDate(Card $card, Carbon $date): void
+    {
+        $now = Carbon::now();
+        $month = $date->month;
+        $year = $date->year;
+
+        // Determine which cycle this transaction belongs to
+        if ($date->day < $card->closing_day) {
+            // Transaction is in the previous cycle
+            $month = $date->copy()->subMonth()->month;
+            $year = $date->copy()->subMonth()->year;
+        }
+
+        $invoice = $this->invoiceService->getOrCreateInvoice($card, $month, $year);
+        $this->invoiceService->recalculateInvoice($invoice);
+    }
+
+    /**
+     * Recalculate all affected invoices for a collection of transactions
+     */
+    private function recalculateAffectedInvoices(?int $cardId, Collection $transactions): void
+    {
+        if (!$cardId || $transactions->isEmpty()) {
+            return;
+        }
+
+        $card = Card::find($cardId);
+        if (!$card) {
+            return;
+        }
+
+        // Get unique months/years from transactions
+        $affectedCycles = $transactions->map(function ($transaction) use ($card) {
+            $dateCarbon = Carbon::parse($transaction->transaction_date);
+            $month = $dateCarbon->month;
+            $year = $dateCarbon->year;
+
+            if ($dateCarbon->day < $card->closing_day) {
+                $month = $dateCarbon->copy()->subMonth()->month;
+                $year = $dateCarbon->copy()->subMonth()->year;
+            }
+
+            return ['month' => $month, 'year' => $year];
+        })->unique(function ($cycle) {
+            return $cycle['month'] . '-' . $cycle['year'];
+        });
+
+        // Recalculate each affected invoice
+        foreach ($affectedCycles as $cycle) {
+            $invoice = $this->invoiceService->getOrCreateInvoice($card, $cycle['month'], $cycle['year']);
+            $this->invoiceService->recalculateInvoice($invoice);
+        }
     }
 }

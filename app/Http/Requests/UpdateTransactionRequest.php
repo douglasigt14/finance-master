@@ -30,6 +30,8 @@ class UpdateTransactionRequest extends FormRequest
             'card_id' => ['nullable', 'integer', 'exists:cards,id'],
             'payment_method' => ['nullable', 'string', 'in:CASH,PIX,DEBIT,CREDIT'],
             'description' => ['nullable', 'string', 'max:1000'],
+            'card_description' => ['nullable', 'string', 'max:1000'],
+            'debtor_id' => ['nullable', 'integer', 'exists:debtors,id'],
             'is_paid' => ['sometimes', 'boolean'],
         ];
     }
