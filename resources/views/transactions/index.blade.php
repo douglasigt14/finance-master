@@ -157,12 +157,25 @@
                                 </td>
                                 <td>
                                     <div class="btn-group">
-                                        <a href="{{ route('transactions.show', $transaction->id) }}" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ route('transactions.show', $transaction->id) }}" class="btn btn-sm btn-outline-primary" title="Ver">
                                             <i class="bi bi-eye"></i>
                                         </a>
-                                        <a href="{{ route('transactions.edit', $transaction->id) }}" class="btn btn-sm btn-outline-secondary">
-                                            <i class="bi bi-pencil"></i>
-                                        </a>
+                                        @if($transaction->group_uuid)
+                                            <a href="{{ route('transactions.edit-group', $transaction->id) }}" class="btn btn-sm btn-outline-info" title="Editar Grupo">
+                                                <i class="bi bi-pencil-square"></i> Grupo
+                                            </a>
+                                            <form action="{{ route('transactions.delete-group', $transaction->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir todas as transações deste grupo?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir Grupo">
+                                                    <i class="bi bi-trash"></i> Grupo
+                                                </button>
+                                            </form>
+                                        @else
+                                            <a href="{{ route('transactions.edit', $transaction->id) }}" class="btn btn-sm btn-outline-secondary" title="Editar">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                        @endif
                                         @if(!$transaction->is_paid)
                                             <form action="{{ route('transactions.mark-paid', $transaction->id) }}" method="POST" class="d-inline">
                                                 @csrf

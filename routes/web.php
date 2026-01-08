@@ -52,6 +52,9 @@ Route::middleware('auth')->group(function () {
     Route::resource('transactions', TransactionsController::class);
     Route::post('/transactions/{id}/mark-paid', [TransactionsController::class, 'markAsPaid'])->name('transactions.mark-paid');
     Route::post('/transactions/{id}/mark-unpaid', [TransactionsController::class, 'markAsUnpaid'])->name('transactions.mark-unpaid');
+    Route::get('/transactions/{id}/edit-group', [TransactionsController::class, 'editGroup'])->name('transactions.edit-group');
+    Route::put('/transactions/{id}/update-group', [TransactionsController::class, 'updateGroup'])->name('transactions.update-group');
+    Route::delete('/transactions/{id}/delete-group', [TransactionsController::class, 'destroyGroup'])->name('transactions.delete-group');
 
     // Invoices
     Route::get('/invoices', [InvoicesController::class, 'index'])->name('invoices.index');

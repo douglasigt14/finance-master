@@ -248,6 +248,155 @@ class TransactionService
     }
 
     /**
+     * Update all transactions in a group
+     * Updates common fields and adjusts dates for installments
+     */
+    public function updateGroup(string $groupUuid, int $userId, array $data): Collection
+    {
+        return DB::transaction(function () use ($groupUuid, $userId, $data) {
+            $groupTransactions = $this->getInstallmentGroup($groupUuid, $userId);
+            
+            if ($groupTransactions->isEmpty()) {
+                throw new \Exception('Grupo de transações não encontrado.');
+            }
+
+            $firstTransaction = $groupTransactions->first();
+            $card = $firstTransaction->card;
+            $oldCardId = $firstTransaction->card_id;
+            $installmentsTotal = $firstTransaction->installments_total;
+            
+            // Store old dates and card IDs for recalculation (before updating)
+            $oldDates = [];
+            $oldCardIds = [];
+            foreach ($groupTransactions as $t) {
+                $oldDates[] = Carbon::parse($t->transaction_date);
+                $oldCardIds[] = $t->card_id;
+            }
+            
+            // Parse the new base date if provided
+            $newBaseDate = isset($data['transaction_date']) 
+                ? Carbon::parse($data['transaction_date']) 
+                : null;
+
+            // Get base description (without installment suffix)
+            $baseDescription = isset($data['description']) 
+                ? $data['description'] 
+                : preg_replace('/\s*-\s*Parcela\s+\d+\/\d+$/', '', $firstTransaction->description);
+
+            // Update card if changed
+            if (isset($data['card_id']) && $data['card_id'] != $firstTransaction->card_id) {
+                $card = Card::find($data['card_id']);
+                if (!$card) {
+                    throw new \Exception('Cartão não encontrado.');
+                }
+            }
+
+            // Ensure future invoices exist if date is being changed
+            if ($newBaseDate && $card) {
+                for ($i = 1; $i <= $installmentsTotal; $i++) {
+                    $installmentDate = $newBaseDate->copy()->addMonths($i - 1);
+                    $month = $installmentDate->month;
+                    $year = $installmentDate->year;
+
+                    if ($installmentDate->day < $card->closing_day) {
+                        $month = $installmentDate->copy()->subMonth()->month;
+                        $year = $installmentDate->copy()->subMonth()->year;
+                    }
+
+                    $this->invoiceService->getOrCreateInvoice($card, $month, $year);
+                }
+            }
+
+            // Update each transaction in the group
+            foreach ($groupTransactions as $transaction) {
+                $updateData = [];
+                
+                // Update common fields
+                if (isset($data['category_id'])) {
+                    $updateData['category_id'] = $data['category_id'];
+                }
+                
+                // Update description with installment suffix
+                $updateData['description'] = $baseDescription . ' - Parcela ' . $transaction->installment_number . '/' . $installmentsTotal;
+                
+                if (isset($data['card_description'])) {
+                    $updateData['card_description'] = $data['card_description'];
+                }
+                if (isset($data['debtor_id'])) {
+                    $updateData['debtor_id'] = $data['debtor_id'];
+                }
+                
+                // Update date for this installment (add months based on installment number - 1)
+                if ($newBaseDate) {
+                    $installmentDate = $newBaseDate->copy()->addMonths($transaction->installment_number - 1);
+                    $updateData['transaction_date'] = $installmentDate->format('Y-m-d');
+                }
+                
+                // Update card if changed
+                if (isset($data['card_id'])) {
+                    $updateData['card_id'] = $data['card_id'];
+                }
+                
+                $transaction->update($updateData);
+            }
+
+            // Recalculate affected invoices
+            // Recalculate old invoices first
+            if ($oldCardId) {
+                $oldCard = Card::find($oldCardId);
+                if ($oldCard) {
+                    foreach ($oldDates as $index => $oldDate) {
+                        $oldCardForDate = $oldCardIds[$index] ? Card::find($oldCardIds[$index]) : $oldCard;
+                        if ($oldCardForDate) {
+                            $this->recalculateInvoiceForDate($oldCardForDate, $oldDate);
+                        }
+                    }
+                }
+            }
+            
+            // Recalculate new invoices
+            if ($card) {
+                $updatedGroup = $this->getInstallmentGroup($groupUuid, $userId);
+                foreach ($updatedGroup as $transaction) {
+                    $this->recalculateInvoiceForTransaction($transaction);
+                }
+            }
+
+            return $this->getInstallmentGroup($groupUuid, $userId);
+        });
+    }
+
+    /**
+     * Delete all transactions in a group
+     */
+    public function deleteGroup(string $groupUuid, int $userId): bool
+    {
+        return DB::transaction(function () use ($groupUuid, $userId) {
+            $groupTransactions = $this->getInstallmentGroup($groupUuid, $userId);
+            
+            if ($groupTransactions->isEmpty()) {
+                throw new \Exception('Grupo de transações não encontrado.');
+            }
+
+            $firstTransaction = $groupTransactions->first();
+            $cardId = $firstTransaction->card_id;
+            $paymentMethod = $firstTransaction->payment_method;
+
+            // Delete all transactions
+            Transaction::where('group_uuid', $groupUuid)
+                ->where('user_id', $userId)
+                ->delete();
+
+            // Recalculate affected invoices
+            if ($paymentMethod === 'CREDIT' && $cardId) {
+                $this->recalculateAffectedInvoices($cardId, $groupTransactions);
+            }
+
+            return true;
+        });
+    }
+
+    /**
      * Recalculate invoice for a specific transaction
      */
     private function recalculateInvoiceForTransaction(Transaction $transaction): void

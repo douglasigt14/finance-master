@@ -159,16 +159,50 @@
             <form id="transactionModalForm" method="POST" action="{{ route('transactions.store') }}">
                 @csrf
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="modal_type" class="form-label">Tipo <span class="text-danger">*</span></label>
-                        <select class="form-select" id="modal_type" name="type" required>
-                            <option value="">Selecione o tipo</option>
-                            <option value="INCOME">Entrada</option>
-                            <option value="EXPENSE" selected>Saída</option>
-                        </select>
-                        <div class="invalid-feedback"></div>
-                    </div>
+                    <div class="row">
+                        <div class="col-4">
+                            <div class="mb-3">
+                                <label for="modal_type" class="form-label">Tipo <span class="text-danger">*</span></label>
+                                <select class="form-select" id="modal_type" name="type" required>
+                                    <option value="">Selecione o tipo</option>
+                                    <option value="INCOME">Entrada</option>
+                                    <option value="EXPENSE" selected>Saída</option>
+                                </select>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
 
+                        <div class="col-4">
+                            <div class="mb-3" id="modal_paymentMethodGroup">
+                                <label for="modal_payment_method" class="form-label">Forma de Pagamento <span class="text-danger">*</span></label>
+                                <select class="form-select" id="modal_payment_method" name="payment_method">
+                                    <option value="">Selecione a forma de pagamento</option>
+                                    <option value="CASH">Dinheiro</option>
+                                    <option value="PIX">PIX</option>
+                                    <option value="DEBIT">Cartão de Débito</option>
+                                    <option value="CREDIT" selected>Cartão de Crédito</option>
+                                </select>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+
+                        <div class="col-4">
+                            <div class="mb-3" id="modal_cardGroup">
+                                <label for="modal_card_id" class="form-label">Cartão de Crédito <span class="text-danger">*</span></label>
+                                <select class="form-select" id="modal_card_id" name="card_id">
+                                    <option value="">Selecione o cartão</option>
+                                    @foreach($allCards as $card)
+                                        <option value="{{ $card->id }}" {{ $selectedCard->id == $card->id ? 'selected' : '' }}>
+                                            {{ $card->name }} (Limit: R$ {{ number_format($card->credit_limit, 2, ',', '.') }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <br>
                     <div class="mb-3">
                         <label for="modal_category_id" class="form-label">Categoria <span class="text-danger">*</span></label>
                         <select class="form-select" id="modal_category_id" name="category_id" required>
@@ -181,38 +215,37 @@
                         </select>
                         <div class="invalid-feedback"></div>
                     </div>
+                    
+                    <div class="row">
+                        <div class="col-4">
+                            <div class="mb-3">
+                                <label for="modal_amount" class="form-label">Valor <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" min="0.01" class="form-control" id="modal_amount" name="amount" required>
+                                </div>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
 
-                    <div class="mb-3" id="modal_paymentMethodGroup" style="display: none;">
-                        <label for="modal_payment_method" class="form-label">Forma de Pagamento <span class="text-danger">*</span></label>
-                        <select class="form-select" id="modal_payment_method" name="payment_method">
-                            <option value="">Selecione a forma de pagamento</option>
-                            <option value="CASH">Dinheiro</option>
-                            <option value="PIX">PIX</option>
-                            <option value="DEBIT">Cartão de Débito</option>
-                            <option value="CREDIT">Cartão de Crédito</option>
-                        </select>
-                        <div class="invalid-feedback"></div>
+                        <div class="col-4">
+                            <div class="mb-3" id="modal_installmentsGroup">
+                                <label for="modal_installments_total" class="form-label">Número de Parcelas <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="modal_installments_total" name="installments_total" value="1" min="1" max="24">
+                                <small class="form-text text-muted">Número total de parcelas (1-24)</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+
+                        <div class="col-4">
+                            <div class="mb-3">
+                                <label for="modal_transaction_date" class="form-label">Data da Transação <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="modal_transaction_date" name="transaction_date" value="{{ date('Y-m-d') }}" required>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="mb-3" id="modal_cardGroup" style="display: none;">
-                        <label for="modal_card_id" class="form-label">Cartão de Crédito <span class="text-danger">*</span></label>
-                        <select class="form-select" id="modal_card_id" name="card_id">
-                            <option value="">Selecione o cartão</option>
-                            @foreach($allCards as $card)
-                                <option value="{{ $card->id }}" {{ $selectedCard->id == $card->id ? 'selected' : '' }}>
-                                    {{ $card->name }} (Limit: R$ {{ number_format($card->credit_limit, 2, ',', '.') }})
-                                </option>
-                            @endforeach
-                        </select>
-                        <div class="invalid-feedback"></div>
-                    </div>
-
-                    <div class="mb-3" id="modal_installmentsGroup" style="display: none;">
-                        <label for="modal_installments_total" class="form-label">Número de Parcelas <span class="text-danger">*</span></label>
-                        <input type="number" class="form-control" id="modal_installments_total" name="installments_total" value="1" min="1" max="24">
-                        <small class="form-text text-muted">Número total de parcelas (1-24)</small>
-                        <div class="invalid-feedback"></div>
-                    </div>
 
                     <div class="mb-3" id="modal_installmentsPreview" style="display: none;">
                         <div class="alert alert-info">
@@ -221,28 +254,16 @@
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="modal_amount" class="form-label">Valor <span class="text-danger">*</span></label>
-                        <div class="input-group">
-                            <span class="input-group-text">R$</span>
-                            <input type="number" step="0.01" min="0.01" class="form-control" id="modal_amount" name="amount" required>
-                        </div>
-                        <div class="invalid-feedback"></div>
-                    </div>
+                    
 
-                    <div class="mb-3">
-                        <label for="modal_transaction_date" class="form-label">Data da Transação <span class="text-danger">*</span></label>
-                        <input type="date" class="form-control" id="modal_transaction_date" name="transaction_date" value="{{ date('Y-m-d') }}" required>
-                        <div class="invalid-feedback"></div>
-                    </div>
-
+                   
                     <div class="mb-3">
                         <label for="modal_description" class="form-label">Descrição</label>
                         <textarea class="form-control" id="modal_description" name="description" rows="3"></textarea>
                         <div class="invalid-feedback"></div>
                     </div>
 
-                    <div class="mb-3" id="modal_cardDescriptionGroup" style="display: none;">
+                    <div class="mb-3" id="modal_cardDescriptionGroup">
                         <label for="modal_card_description" class="form-label">Descrição no Cartão</label>
                         <input type="text" class="form-control" id="modal_card_description" name="card_description" placeholder="Ex: LOJA X JS">
                         <small class="form-text text-muted">Descrição exata como aparece no cartão de crédito</small>
@@ -606,6 +627,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Initialize form when modal is shown
+    document.getElementById('newTransactionModal').addEventListener('show.bs.modal', function() {
+        modalTypeSelect.value = 'EXPENSE';
+        modalPaymentMethodSelect.value = 'CREDIT';
+        modalCardIdSelect.value = '{{ $selectedCard->id }}';
+        updateModalFormVisibility();
+    });
+
     // Reset form when modal is closed
     document.getElementById('newTransactionModal').addEventListener('hidden.bs.modal', function() {
         transactionModalForm.reset();
@@ -613,6 +642,7 @@ document.addEventListener('DOMContentLoaded', function() {
         transactionModalForm.querySelectorAll('.invalid-feedback').forEach(el => el.textContent = '');
         transactionModalForm.querySelectorAll('.alert').forEach(el => el.remove());
         modalTypeSelect.value = 'EXPENSE';
+        modalPaymentMethodSelect.value = 'CREDIT';
         modalCardIdSelect.value = '{{ $selectedCard->id }}';
         updateModalFormVisibility();
     });

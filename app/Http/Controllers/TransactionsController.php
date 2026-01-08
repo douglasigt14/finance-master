@@ -181,4 +181,88 @@ class TransactionsController extends Controller
         return redirect()->back()
             ->with('success', 'Transação marcada como não paga.');
     }
+
+    /**
+     * Show form to edit a transaction group
+     */
+    public function editGroup(Request $request, string $id)
+    {
+        $transaction = $this->transactionService->getById((int) $id, $request->user()->id);
+
+        if (!$transaction || !$transaction->group_uuid) {
+            abort(404, 'Transação não encontrada ou não faz parte de um grupo.');
+        }
+
+        $groupTransactions = $this->transactionService->getInstallmentGroup(
+            $transaction->group_uuid,
+            $request->user()->id
+        );
+
+        $categories = Category::where('user_id', $request->user()->id)->orderBy('name')->get();
+        $cards = Card::where('user_id', $request->user()->id)->active()->orderBy('name')->get();
+        $debtors = \App\Models\Debtor::where('user_id', $request->user()->id)->orderBy('name')->get();
+
+        return view('transactions.edit-group', compact('transaction', 'groupTransactions', 'categories', 'cards', 'debtors'));
+    }
+
+    /**
+     * Update a transaction group
+     */
+    public function updateGroup(Request $request, string $id)
+    {
+        $transaction = $this->transactionService->getById((int) $id, $request->user()->id);
+
+        if (!$transaction || !$transaction->group_uuid) {
+            abort(404, 'Transação não encontrada ou não faz parte de um grupo.');
+        }
+
+        $validated = $request->validate([
+            'category_id' => 'required|integer|exists:categories,id',
+            'transaction_date' => 'required|date',
+            'description' => 'nullable|string|max:1000',
+            'card_description' => 'nullable|string|max:1000',
+            'card_id' => 'nullable|integer|exists:cards,id',
+            'debtor_id' => 'nullable|integer|exists:debtors,id',
+        ]);
+
+        try {
+            $this->transactionService->updateGroup(
+                $transaction->group_uuid,
+                $request->user()->id,
+                $validated
+            );
+
+            return redirect()->route('transactions.index')
+                ->with('success', 'Grupo de transações atualizado com sucesso.');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Delete a transaction group
+     */
+    public function destroyGroup(Request $request, string $id)
+    {
+        $transaction = $this->transactionService->getById((int) $id, $request->user()->id);
+
+        if (!$transaction || !$transaction->group_uuid) {
+            abort(404, 'Transação não encontrada ou não faz parte de um grupo.');
+        }
+
+        try {
+            $this->transactionService->deleteGroup(
+                $transaction->group_uuid,
+                $request->user()->id
+            );
+
+            return redirect()->route('transactions.index')
+                ->with('success', 'Grupo de transações excluído com sucesso.');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', $e->getMessage());
+        }
+    }
 }

@@ -130,11 +130,9 @@
                                         <span class="badge bg-secondary">
                                             {{ $transaction->installment_number }}/{{ $transaction->installments_total }}
                                         </span>
-                                    @else
-                                        -
                                     @endif
                                 </td>
-                                <td>{{ $transaction->debtor->name ?? '-' }}</td>
+                                <td>{{ $transaction->debtor->name ?? '' }}</td>
                             </tr>
                         @endforeach
                     </tbody>
