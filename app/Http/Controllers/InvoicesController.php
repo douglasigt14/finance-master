@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Card;
+use App\Models\Category;
 use App\Services\CardService;
 use App\Services\InvoiceService;
 use Illuminate\Http\Request;
@@ -80,6 +81,11 @@ class InvoicesController extends Controller
             ->orderBy('transaction_date')
             ->get();
 
+        // Get data for transaction modal
+        $categories = Category::where('user_id', $user->id)->orderBy('name')->get();
+        $allCards = Card::where('user_id', $user->id)->active()->orderBy('name')->get();
+        $debtors = \App\Models\Debtor::where('user_id', $user->id)->orderBy('name')->get();
+
         return view('invoices.index', compact(
             'cards',
             'selectedCard',
@@ -88,7 +94,10 @@ class InvoicesController extends Controller
             'availableCredit',
             'selectedInvoice',
             'transactions',
-            'cycleDates'
+            'cycleDates',
+            'categories',
+            'allCards',
+            'debtors'
         ));
     }
 

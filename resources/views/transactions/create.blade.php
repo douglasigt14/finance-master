@@ -216,14 +216,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (installments > 1 && amount > 0 && date) {
             const installmentAmount = amount / installments;
-            const startDate = new Date(date);
+            
+            // Parse date string (YYYY-MM-DD) to avoid timezone issues
+            const [year, month, day] = date.split('-').map(Number);
+            const startDate = new Date(year, month - 1, day);
             
             let preview = '<ul class="mb-0">';
             for (let i = 1; i <= installments; i++) {
                 const installmentDate = new Date(startDate);
                 installmentDate.setMonth(startDate.getMonth() + (i - 1));
                 
-                const formattedDate = installmentDate.toLocaleDateString('pt-BR');
+                const formattedDate = installmentDate.toLocaleDateString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
                 preview += `<li>Parcela ${i}/${installments}: R$ ${installmentAmount.toFixed(2)} - ${formattedDate}</li>`;
             }
             preview += '</ul>';

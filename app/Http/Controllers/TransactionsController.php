@@ -62,6 +62,13 @@ class TransactionsController extends Controller
             ? 'Transação com ' . count($result) . ' parcelas criada com sucesso.'
             : 'Transação criada com sucesso.';
 
+        if ($request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ]);
+        }
+
         return redirect()->route('transactions.index')
             ->with('success', $message);
     }
