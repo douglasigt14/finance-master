@@ -1,0 +1,183 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Card;
+use App\Models\Invoice;
+use App\Models\Transaction;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
+
+class InvoiceService
+{
+    /**
+     * Get or create invoice for a card and cycle
+     */
+    public function getOrCreateInvoice(Card $card, int $month, int $year): Invoice
+    {
+        $invoice = Invoice::where('card_id', $card->id)
+            ->where('cycle_month', $month)
+            ->where('cycle_year', $year)
+            ->first();
+
+        if (!$invoice) {
+            $invoice = $this->createInvoice($card, $month, $year);
+        }
+
+        return $invoice;
+    }
+
+    /**
+     * Create invoice for a card and cycle
+     */
+    public function createInvoice(Card $card, int $month, int $year): Invoice
+    {
+        $cycleDates = $this->calculateCycleDates($card, $month, $year);
+
+        $totalAmount = $this->calculateInvoiceTotal($card, $cycleDates['start'], $cycleDates['end']);
+
+        return Invoice::create([
+            'user_id' => $card->user_id,
+            'card_id' => $card->id,
+            'cycle_month' => $month,
+            'cycle_year' => $year,
+            'closing_date' => $cycleDates['closing'],
+            'due_date' => $cycleDates['due'],
+            'total_amount' => $totalAmount,
+            'paid_amount' => 0,
+            'is_paid' => false,
+        ]);
+    }
+
+    /**
+     * Calculate cycle dates based on card's closing_day
+     */
+    public function calculateCycleDates(Card $card, int $month, int $year): array
+    {
+        $closingDay = $card->closing_day;
+        $dueDay = $card->due_day;
+
+        // Closing date is the closing_day of the month
+        $closingDate = Carbon::create($year, $month, $closingDay);
+
+        // Start of cycle is closing_day + 1 of previous month
+        $startDate = $closingDate->copy()->subMonth()->addDay();
+
+        // End of cycle is closing_day of current month
+        $endDate = $closingDate->copy();
+
+        // Due date is due_day of next month
+        $dueDate = $closingDate->copy()->addMonth()->day($dueDay);
+
+        return [
+            'start' => $startDate,
+            'end' => $endDate,
+            'closing' => $closingDate,
+            'due' => $dueDate,
+        ];
+    }
+
+    /**
+     * Calculate total amount for invoice based on transactions in cycle
+     */
+    public function calculateInvoiceTotal(Card $card, Carbon $startDate, Carbon $endDate): float
+    {
+        $total = Transaction::where('card_id', $card->id)
+            ->where('payment_method', 'CREDIT')
+            ->where('type', 'EXPENSE')
+            ->whereBetween('transaction_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+            ->sum('amount');
+
+        return (float) $total;
+    }
+
+    /**
+     * Recalculate invoice total
+     */
+    public function recalculateInvoice(Invoice $invoice): Invoice
+    {
+        $card = $invoice->card;
+        $cycleDates = $this->calculateCycleDates($card, $invoice->cycle_month, $invoice->cycle_year);
+
+        $totalAmount = $this->calculateInvoiceTotal($card, $cycleDates['start'], $cycleDates['end']);
+
+        $invoice->update([
+            'total_amount' => $totalAmount,
+            'closing_date' => $cycleDates['closing'],
+            'due_date' => $cycleDates['due'],
+        ]);
+
+        return $invoice->fresh();
+    }
+
+    /**
+     * Get invoices for a card
+     */
+    public function getInvoicesByCard(Card $card): Collection
+    {
+        return Invoice::where('card_id', $card->id)
+            ->orderBy('cycle_year', 'desc')
+            ->orderBy('cycle_month', 'desc')
+            ->get();
+    }
+
+    /**
+     * Get current cycle invoice for a card
+     */
+    public function getCurrentInvoice(Card $card): ?Invoice
+    {
+        $now = Carbon::now();
+        $month = $now->month;
+        $year = $now->year;
+
+        // Check if we're before or after closing day
+        if ($now->day < $card->closing_day) {
+            // Still in previous cycle
+            $month = $now->copy()->subMonth()->month;
+            $year = $now->copy()->subMonth()->year;
+        }
+
+        return $this->getOrCreateInvoice($card, $month, $year);
+    }
+
+    /**
+     * Mark invoice as paid
+     */
+    public function markAsPaid(Invoice $invoice, float $paidAmount = null): Invoice
+    {
+        $paidAmount = $paidAmount ?? $invoice->total_amount;
+
+        $invoice->update([
+            'is_paid' => true,
+            'paid_amount' => $paidAmount,
+            'paid_at' => now(),
+        ]);
+
+        return $invoice->fresh();
+    }
+
+    /**
+     * Mark invoice as unpaid
+     */
+    public function markAsUnpaid(Invoice $invoice): Invoice
+    {
+        $invoice->update([
+            'is_paid' => false,
+            'paid_amount' => 0,
+            'paid_at' => null,
+        ]);
+
+        return $invoice->fresh();
+    }
+
+    /**
+     * Get available credit for a card (limit - current cycle expenses)
+     */
+    public function getAvailableCredit(Card $card): float
+    {
+        $currentInvoice = $this->getCurrentInvoice($card);
+        $used = $currentInvoice->total_amount;
+
+        return max(0, $card->credit_limit - $used);
+    }
+}
