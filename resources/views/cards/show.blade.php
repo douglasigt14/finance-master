@@ -71,7 +71,7 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
-                    <a href="{{ route('invoices.card', $card->id) }}" class="btn btn-primary">
+                    <a href="{{ route('invoices.index', ['card_id' => $card->id]) }}" class="btn btn-primary">
                         <i class="bi bi-receipt"></i> Ver Faturas
                     </a>
                     <a href="{{ route('transactions.create') }}?card_id={{ $card->id }}" class="btn btn-outline-primary">

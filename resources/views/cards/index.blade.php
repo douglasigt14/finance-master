@@ -20,7 +20,7 @@
 @else
     <div class="row">
         @foreach($cards as $card)
-            <div class="col-md-6 mb-4">
+            <div class="col-md-3 mb-4">
                 <div class="card h-100">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
@@ -51,7 +51,7 @@
                     </div>
                     <div class="card-footer">
                         <div class="btn-group w-100" role="group">
-                            <a href="{{ route('cards.show', $card->id) }}" class="btn btn-sm btn-outline-primary">
+                            <a href="{{ route('invoices.index', ['card_id' => $card->id]) }}" class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-eye"></i> Ver
                             </a>
                             <a href="{{ route('cards.edit', $card->id) }}" class="btn btn-sm btn-outline-secondary">

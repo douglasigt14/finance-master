@@ -76,7 +76,7 @@ class InvoicesController extends Controller
                 $cycleDates['start']->format('Y-m-d'),
                 $cycleDates['end']->format('Y-m-d')
             ])
-            ->with('category')
+            ->with(['category', 'debtor'])
             ->orderBy('transaction_date')
             ->get();
 
@@ -115,7 +115,7 @@ class InvoicesController extends Controller
                 $cycleDates['start']->format('Y-m-d'),
                 $cycleDates['end']->format('Y-m-d')
             ])
-            ->with('category')
+            ->with(['category', 'debtor'])
             ->orderBy('transaction_date')
             ->get();
 

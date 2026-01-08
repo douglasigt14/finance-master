@@ -4,8 +4,16 @@
 
 @section('content')
 <div class="row mb-4">
-    <div class="col-12">
+    <div class="col-12 d-flex justify-content-between align-items-center">
         <h2><i class="bi bi-receipt"></i> Faturas de Cartão de Crédito</h2>
+        <div>
+            <a href="{{ route('transactions.create') }}?card_id={{ $selectedCard->id }}&type=EXPENSE&payment_method=CREDIT" class="btn btn-primary me-2">
+                <i class="bi bi-plus-circle"></i> Nova Transação
+            </a>
+            <a href="{{ route('cards.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
     </div>
 </div>
 
@@ -85,12 +93,6 @@
                                         </div>
                                     </div>
                                     <div class="btn-group-vertical ms-2">
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-primary view-invoice-btn"
-                                                data-month="{{ $invoice->cycle_month }}"
-                                                data-year="{{ $invoice->cycle_year }}">
-                                            <i class="bi bi-eye"></i>
-                                        </button>
                                         @if(!$invoice->is_paid)
                                             <form action="{{ route('invoices.mark-paid', [$selectedCard->id, $invoice->cycle_month, $invoice->cycle_year]) }}" 
                                                   method="POST" class="d-inline" onclick="event.stopPropagation()">

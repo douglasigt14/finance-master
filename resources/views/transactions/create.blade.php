@@ -20,8 +20,8 @@
                         <label for="type" class="form-label">Tipo <span class="text-danger">*</span></label>
                         <select class="form-select @error('type') is-invalid @enderror" id="type" name="type" required>
                             <option value="">Selecione o tipo</option>
-                            <option value="INCOME" {{ old('type') === 'INCOME' ? 'selected' : '' }}>Entrada</option>
-                            <option value="EXPENSE" {{ old('type') === 'EXPENSE' ? 'selected' : '' }}>Saída</option>
+                            <option value="INCOME" {{ old('type', request('type')) === 'INCOME' ? 'selected' : '' }}>Entrada</option>
+                            <option value="EXPENSE" {{ old('type', request('type')) === 'EXPENSE' ? 'selected' : '' }}>Saída</option>
                         </select>
                         @error('type')
                             <div class="invalid-feedback">{{ $message }}</div>
@@ -49,10 +49,10 @@
                         <label for="payment_method" class="form-label">Forma de Pagamento <span class="text-danger">*</span></label>
                         <select class="form-select @error('payment_method') is-invalid @enderror" id="payment_method" name="payment_method">
                             <option value="">Selecione a forma de pagamento</option>
-                            <option value="CASH" {{ old('payment_method') === 'CASH' ? 'selected' : '' }}>Dinheiro</option>
-                            <option value="PIX" {{ old('payment_method') === 'PIX' ? 'selected' : '' }}>PIX</option>
-                            <option value="DEBIT" {{ old('payment_method') === 'DEBIT' ? 'selected' : '' }}>Cartão de Débito</option>
-                            <option value="CREDIT" {{ old('payment_method') === 'CREDIT' ? 'selected' : '' }}>Cartão de Crédito</option>
+                            <option value="CASH" {{ old('payment_method', request('payment_method')) === 'CASH' ? 'selected' : '' }}>Dinheiro</option>
+                            <option value="PIX" {{ old('payment_method', request('payment_method')) === 'PIX' ? 'selected' : '' }}>PIX</option>
+                            <option value="DEBIT" {{ old('payment_method', request('payment_method')) === 'DEBIT' ? 'selected' : '' }}>Cartão de Débito</option>
+                            <option value="CREDIT" {{ old('payment_method', request('payment_method')) === 'CREDIT' ? 'selected' : '' }}>Cartão de Crédito</option>
                         </select>
                         @error('payment_method')
                             <div class="invalid-feedback">{{ $message }}</div>
@@ -175,6 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const paymentMethodGroup = document.getElementById('paymentMethodGroup');
     const paymentMethodSelect = document.getElementById('payment_method');
     const cardGroup = document.getElementById('cardGroup');
+    const cardIdSelect = document.getElementById('card_id');
     const cardDescriptionGroup = document.getElementById('cardDescriptionGroup');
     const installmentsGroup = document.getElementById('installmentsGroup');
     const installmentsPreview = document.getElementById('installmentsPreview');
@@ -242,6 +243,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initial visibility update
     updateFormVisibility();
+    
+    // Pre-fill form from query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const typeParam = urlParams.get('type');
+    const paymentMethodParam = urlParams.get('payment_method');
+    const cardIdParam = urlParams.get('card_id');
+    
+    if (typeParam && typeSelect.value !== typeParam) {
+        typeSelect.value = typeParam;
+        updateFormVisibility();
+    }
+    
+    if (paymentMethodParam && paymentMethodSelect.value !== paymentMethodParam) {
+        paymentMethodSelect.value = paymentMethodParam;
+        updateFormVisibility();
+    }
+    
+    if (cardIdParam && cardIdSelect.value !== cardIdParam) {
+        cardIdSelect.value = cardIdParam;
+    }
 });
 </script>
 @endpush

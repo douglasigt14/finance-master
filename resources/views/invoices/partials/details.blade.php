@@ -70,6 +70,13 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Transações</h5>
         <div>
+            <form action="{{ route('invoices.recalculate', [$card->id, $invoice->cycle_month, $invoice->cycle_year]) }}" 
+                  method="POST" class="d-inline me-2">
+                @csrf
+                <button type="submit" class="btn btn-sm btn-info">
+                    <i class="bi bi-arrow-clockwise"></i> Recalcular
+                </button>
+            </form>
             @if(!$invoice->is_paid)
                 <form action="{{ route('invoices.mark-paid', [$card->id, $invoice->cycle_month, $invoice->cycle_year]) }}" 
                       method="POST" class="d-inline">
@@ -98,17 +105,19 @@
                     <thead>
                         <tr>
                             <th>Data</th>
+                            <th>Nome na Fatura</th>
                             <th>Descrição</th>
                             <th>Categoria</th>
                             <th>Valor</th>
                             <th>Parcelas</th>
-                            <th>Status</th>
+                            <th>Devedor</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach($transactions as $transaction)
                             <tr>
                                 <td>{{ $transaction->transaction_date->format('d/m/Y') }}</td>
+                                <td>{{ $transaction->card_description ?? '-' }}</td>
                                 <td>{{ $transaction->description ?? '-' }}</td>
                                 <td>
                                     <span class="badge" style="background-color: {{ $transaction->category->color ?? '#6c757d' }}">
@@ -125,19 +134,13 @@
                                         -
                                     @endif
                                 </td>
-                                <td>
-                                    @if($transaction->is_paid)
-                                        <span class="badge bg-success">Pago</span>
-                                    @else
-                                        <span class="badge bg-secondary">Não Pago</span>
-                                    @endif
-                                </td>
+                                <td>{{ $transaction->debtor->name ?? '-' }}</td>
                             </tr>
                         @endforeach
                     </tbody>
                     <tfoot>
                         <tr>
-                            <th colspan="3" class="text-end">Total:</th>
+                            <th colspan="4" class="text-end">Total:</th>
                             <th>R$ {{ number_format($transactions->sum('amount'), 2, ',', '.') }}</th>
                             <th colspan="2"></th>
                         </tr>
