@@ -29,6 +29,7 @@ class StoreCardRequest extends FormRequest
             'closing_day' => ['required', 'integer', 'min:1', 'max:31'],
             'due_day' => ['required', 'integer', 'min:1', 'max:31'],
             'status' => ['nullable', 'string', 'in:active,inactive'],
+            'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
         ];
     }
 }

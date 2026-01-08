@@ -12,6 +12,7 @@ class UpdateCardDTO
         public readonly ?int $closingDay = null,
         public readonly ?int $dueDay = null,
         public readonly ?string $status = null,
+        public readonly ?string $color = null,
     ) {
     }
 
@@ -25,6 +26,7 @@ class UpdateCardDTO
             closingDay: isset($data['closing_day']) ? (int) $data['closing_day'] : null,
             dueDay: isset($data['due_day']) ? (int) $data['due_day'] : null,
             status: $data['status'] ?? null,
+            color: $data['color'] ?? null,
         );
     }
 
@@ -52,6 +54,9 @@ class UpdateCardDTO
         }
         if ($this->status !== null) {
             $array['status'] = $this->status;
+        }
+        if ($this->color !== null) {
+            $array['color'] = $this->color;
         }
 
         return $array;

@@ -88,15 +88,33 @@
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="status" class="form-label">Status</label>
-                        <select class="form-select @error('status') is-invalid @enderror" id="status" name="status">
-                            <option value="active" {{ old('status', 'active') === 'active' ? 'selected' : '' }}>Ativo</option>
-                            <option value="inactive" {{ old('status') === 'inactive' ? 'selected' : '' }}>Inativo</option>
-                        </select>
-                        @error('status')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-select @error('status') is-invalid @enderror" id="status" name="status">
+                                <option value="active" {{ old('status', 'active') === 'active' ? 'selected' : '' }}>Ativo</option>
+                                <option value="inactive" {{ old('status') === 'inactive' ? 'selected' : '' }}>Inativo</option>
+                            </select>
+                            @error('status')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="color" class="form-label">Cor</label>
+                            <div class="input-group">
+                                <input type="color" class="form-control form-control-color @error('color') is-invalid @enderror" 
+                                       id="color" name="color" value="{{ old('color', '#0d6efd') }}" 
+                                       title="Escolha a cor do cartão">
+                                <input type="text" class="form-control @error('color') is-invalid @enderror" 
+                                       id="color_text" value="{{ old('color', '#0d6efd') }}" 
+                                       pattern="^#[0-9A-Fa-f]{6}$" placeholder="#0d6efd">
+                            </div>
+                            <small class="form-text text-muted">Escolha uma cor para identificar o cartão</small>
+                            @error('color')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
                     </div>
 
                     <div class="d-flex justify-content-between">
@@ -112,4 +130,25 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const colorPicker = document.getElementById('color');
+    const colorText = document.getElementById('color_text');
+    
+    if (colorPicker && colorText) {
+        // Sync color picker to text input
+        colorPicker.addEventListener('input', function() {
+            colorText.value = this.value;
+        });
+        
+        // Sync text input to color picker
+        colorText.addEventListener('input', function() {
+            if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) {
+                colorPicker.value = this.value;
+            }
+        });
+    }
+});
+</script>
 @endsection

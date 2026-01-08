@@ -12,12 +12,20 @@ class InvoiceService
 {
     /**
      * Get or create invoice for a card and cycle
+     * @param int $month Month of closing date
+     * @param int $year Year of closing date
      */
     public function getOrCreateInvoice(Card $card, int $month, int $year): Invoice
     {
+        // Calculate dates to get the due date month/year
+        $cycleDates = $this->calculateCycleDates($card, $month, $year);
+        $dueMonth = $cycleDates['due']->month;
+        $dueYear = $cycleDates['due']->year;
+
+        // Search by due date month/year (which is stored in cycle_month/cycle_year)
         $invoice = Invoice::where('card_id', $card->id)
-            ->where('cycle_month', $month)
-            ->where('cycle_year', $year)
+            ->where('cycle_month', $dueMonth)
+            ->where('cycle_year', $dueYear)
             ->first();
 
         if (!$invoice) {
@@ -25,6 +33,17 @@ class InvoiceService
         }
 
         return $invoice;
+    }
+
+    /**
+     * Get invoice by due date month/year (cycle_month/cycle_year)
+     */
+    public function getInvoiceByDueMonth(Card $card, int $dueMonth, int $dueYear): ?Invoice
+    {
+        return Invoice::where('card_id', $card->id)
+            ->where('cycle_month', $dueMonth)
+            ->where('cycle_year', $dueYear)
+            ->first();
     }
 
     /**
@@ -36,11 +55,15 @@ class InvoiceService
 
         $totalAmount = $this->calculateInvoiceTotal($card, $cycleDates['start'], $cycleDates['end']);
 
+        // Use due date month/year for cycle identification (not closing date)
+        $dueMonth = $cycleDates['due']->month;
+        $dueYear = $cycleDates['due']->year;
+
         return Invoice::create([
             'user_id' => $card->user_id,
             'card_id' => $card->id,
-            'cycle_month' => $month,
-            'cycle_year' => $year,
+            'cycle_month' => $dueMonth,
+            'cycle_year' => $dueYear,
             'closing_date' => $cycleDates['closing'],
             'due_date' => $cycleDates['due'],
             'total_amount' => $totalAmount,
@@ -73,22 +96,30 @@ class InvoiceService
         // End of cycle is closing_day of current month
         $endDate = $closingDate->copy();
 
-        // Due date is due_day of next month (month after closing)
-        // Calculate next month directly to avoid date overflow issues
-        $nextMonth = $month + 1;
-        $nextYear = $year;
+        // Determine if due date is in the same month or next month
+        // If due_day > closing_day, due date can be in the same month (e.g., fecha 07/01, vence 10/01)
+        // If due_day <= closing_day, due date is in the next month (e.g., fecha 29/12, vence 08/01)
+        $dueMonth = $month;
+        $dueYear = $year;
         
-        // Handle year rollover
-        if ($nextMonth > 12) {
-            $nextMonth = 1;
-            $nextYear += 1;
+        if ($dueDay <= $closingDay) {
+            // Due date is in the next month (because if it were same month, it would have already passed)
+            $dueMonth = $month + 1;
+            $dueYear = $year;
+            
+            // Handle year rollover
+            if ($dueMonth > 12) {
+                $dueMonth = 1;
+                $dueYear += 1;
+            }
         }
+        // If dueDay > closingDay, due date is in the same month (dueMonth and dueYear remain unchanged)
         
-        // Get last day of next month to validate due_day
-        $firstDayOfNextMonth = Carbon::create($nextYear, $nextMonth, 1);
-        $lastDayOfNextMonth = $firstDayOfNextMonth->copy()->endOfMonth()->day;
-        $actualDueDay = min($dueDay, $lastDayOfNextMonth);
-        $dueDate = Carbon::create($nextYear, $nextMonth, $actualDueDay);
+        // Get last day of due month to validate due_day
+        $firstDayOfDueMonth = Carbon::create($dueYear, $dueMonth, 1);
+        $lastDayOfDueMonth = $firstDayOfDueMonth->copy()->endOfMonth()->day;
+        $actualDueDay = min($dueDay, $lastDayOfDueMonth);
+        $dueDate = Carbon::create($dueYear, $dueMonth, $actualDueDay);
 
         return [
             'start' => $startDate,
@@ -118,11 +149,45 @@ class InvoiceService
     public function recalculateInvoice(Invoice $invoice): Invoice
     {
         $card = $invoice->card;
-        $cycleDates = $this->calculateCycleDates($card, $invoice->cycle_month, $invoice->cycle_year);
+        
+        // Get closing month/year from the invoice's closing_date to recalculate
+        $closingDate = Carbon::parse($invoice->closing_date);
+        $closingMonth = $closingDate->month;
+        $closingYear = $closingDate->year;
+        
+        $cycleDates = $this->calculateCycleDates($card, $closingMonth, $closingYear);
 
         $totalAmount = $this->calculateInvoiceTotal($card, $cycleDates['start'], $cycleDates['end']);
 
+        // Update cycle_month and cycle_year based on due date
+        $dueMonth = $cycleDates['due']->month;
+        $dueYear = $cycleDates['due']->year;
+
+        // Check if another invoice already exists with this cycle_month/cycle_year
+        $existingInvoice = Invoice::where('card_id', $card->id)
+            ->where('cycle_month', $dueMonth)
+            ->where('cycle_year', $dueYear)
+            ->where('id', '!=', $invoice->id)
+            ->first();
+
+        if ($existingInvoice) {
+            // If duplicate exists, recalculate the existing one's total and delete the duplicate
+            $existingCycleDates = $this->calculateCycleDates($card, $existingInvoice->closing_date->month, $existingInvoice->closing_date->year);
+            $existingTotal = $this->calculateInvoiceTotal($card, $existingCycleDates['start'], $existingCycleDates['end']);
+            
+            $existingInvoice->update([
+                'total_amount' => $existingTotal,
+                'closing_date' => $existingCycleDates['closing'],
+                'due_date' => $existingCycleDates['due'],
+            ]);
+            // Delete the duplicate
+            $invoice->delete();
+            return $existingInvoice->fresh();
+        }
+
         $invoice->update([
+            'cycle_month' => $dueMonth,
+            'cycle_year' => $dueYear,
             'total_amount' => $totalAmount,
             'closing_date' => $cycleDates['closing'],
             'due_date' => $cycleDates['due'],
@@ -140,16 +205,16 @@ class InvoiceService
         $currentMonth = $now->month;
         $currentYear = $now->year;
 
-        // Determine current cycle
+        // Determine current cycle (based on closing day)
         if ($now->day < $card->closing_day) {
             $currentMonth = $now->copy()->subMonth()->month;
             $currentYear = $now->copy()->subMonth()->year;
         }
 
-        // Ensure current invoice exists
+        // Ensure current invoice exists (this will create with due date month/year)
         $this->getOrCreateInvoice($card, $currentMonth, $currentYear);
 
-        // Create future invoices (next 3 months from current cycle)
+        // Create future invoices (next 3 months from current closing month)
         // Calculate future months/years directly to avoid date overflow issues
         for ($i = 1; $i <= 3; $i++) {
             $futureMonth = $currentMonth + $i;
@@ -164,7 +229,7 @@ class InvoiceService
             $this->getOrCreateInvoice($card, $futureMonth, $futureYear);
         }
 
-        // Return all invoices ordered by date (oldest first)
+        // Return all invoices ordered by due date (oldest first)
         return Invoice::where('card_id', $card->id)
             ->orderBy('cycle_year', 'asc')
             ->orderBy('cycle_month', 'asc')

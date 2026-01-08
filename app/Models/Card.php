@@ -25,6 +25,7 @@ class Card extends Model
         'closing_day',
         'due_day',
         'status',
+        'color',
     ];
 
     /**

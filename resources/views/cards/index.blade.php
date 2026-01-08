@@ -21,8 +21,8 @@
     <div class="row">
         @foreach($cards as $card)
             <div class="col-md-3 mb-4">
-                <div class="card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="card h-100" style="border-top: 4px solid {{ $card->color ?? '#0d6efd' }};">
+                    <div class="card-header d-flex justify-content-between align-items-center" style="background-color: {{ $card->color ?? '#0d6efd' }}20;">
                         <h5 class="mb-0">
                             <i class="bi bi-credit-card-2-front"></i> {{ $card->name }}
                         </h5>

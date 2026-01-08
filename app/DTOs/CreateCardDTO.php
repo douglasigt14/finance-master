@@ -13,6 +13,7 @@ class CreateCardDTO
         public readonly int $closingDay,
         public readonly int $dueDay,
         public readonly string $status = 'active',
+        public readonly ?string $color = null,
     ) {
     }
 
@@ -27,6 +28,7 @@ class CreateCardDTO
             closingDay: (int) $data['closing_day'],
             dueDay: (int) $data['due_day'],
             status: $data['status'] ?? 'active',
+            color: $data['color'] ?? null,
         );
     }
 
@@ -41,6 +43,7 @@ class CreateCardDTO
             'closing_day' => $this->closingDay,
             'due_day' => $this->dueDay,
             'status' => $this->status,
+            'color' => $this->color,
         ];
     }
 }

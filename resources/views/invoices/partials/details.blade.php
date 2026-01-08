@@ -39,15 +39,15 @@
 </div>
 
 <!-- Invoice Info -->
-<div class="card mb-4">
-    <div class="card-header">
+<div class="card mb-4" style="border-top: 4px solid {{ $card->color ?? '#0d6efd' }};">
+    <div class="card-header" style="background-color: {{ $card->color ?? '#0d6efd' }}20;">
         <h5 class="mb-0">Informações da Fatura</h5>
     </div>
     <div class="card-body">
         <div class="row">
             <div class="col-md-3">
                 <strong>Ciclo:</strong><br>
-                {{ $invoice->cycle_month }}/{{ $invoice->cycle_year }}
+                {{ \Carbon\Carbon::create($invoice->cycle_year, $invoice->cycle_month, 1)->locale('pt_BR')->translatedFormat('F/Y') }}
             </div>
             <div class="col-md-3">
                 <strong>Período do Ciclo:</strong><br>
@@ -66,8 +66,8 @@
 </div>
 
 <!-- Transactions -->
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+<div class="card" style="border-top: 4px solid {{ $card->color ?? '#0d6efd' }};">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background-color: {{ $card->color ?? '#0d6efd' }}20;">
         <h5 class="mb-0">Transações</h5>
         <div>
             <form action="{{ route('invoices.recalculate', [$card->id, $invoice->cycle_month, $invoice->cycle_year]) }}" 

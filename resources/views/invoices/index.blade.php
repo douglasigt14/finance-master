@@ -41,8 +41,8 @@
 
     <!-- Left Column: Invoice List (4/12) -->
     <div class="col-md-4">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card" style="border-top: 4px solid {{ $selectedCard->color ?? '#0d6efd' }};">
+            <div class="card-header d-flex justify-content-between align-items-center" style="background-color: {{ $selectedCard->color ?? '#0d6efd' }}20;">
                 <h5 class="mb-0">Lista de Faturas</h5>
                 <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="showPaidInvoices" onchange="togglePaidInvoices()">
@@ -71,7 +71,7 @@
                                     <div class="flex-grow-1">
                                         <div class="d-flex align-items-center mb-1">
                                             <h6 class="mb-0 me-2">
-                                                {{ $invoice->cycle_month }}/{{ $invoice->cycle_year }}
+                                                {{ \Carbon\Carbon::create($invoice->cycle_year, $invoice->cycle_month, 1)->locale('pt_BR')->translatedFormat('F/Y') }}
                                             </h6>
                                             @if($isFuture)
                                                 <span class="badge bg-info">Futura</span>
@@ -127,10 +127,10 @@
      <!-- Right Column: Invoice Details (8/12) -->
      <div class="col-md-8 h-100">
         <div id="invoiceDetails">
-            <div class="card mb-4">
-                <div class="card-header">
+            <div class="card mb-4" style="border-top: 4px solid {{ $selectedCard->color ?? '#0d6efd' }};">
+                <div class="card-header" style="background-color: {{ $selectedCard->color ?? '#0d6efd' }}20;">
                     <h5 class="mb-0">
-                        <i class="bi bi-receipt"></i> Fatura - {{ $selectedCard->name }} ({{ $selectedInvoice->cycle_month }}/{{ $selectedInvoice->cycle_year }})
+                        <i class="bi bi-receipt"></i> Fatura - {{ $selectedCard->name }} ({{ \Carbon\Carbon::create($selectedInvoice->cycle_year, $selectedInvoice->cycle_month, 1)->locale('pt_BR')->translatedFormat('F/Y') }})
                     </h5>
                 </div>
                 <div class="card-body">
@@ -216,14 +216,36 @@
                         <div class="invalid-feedback"></div>
                     </div>
                     
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Valor <span class="text-danger">*</span></label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="amount_type" id="modal_amount_type_total" value="total">
+                            <label class="btn btn-outline-primary" for="modal_amount_type_total">Valor Total</label>
+                            
+                            <input type="radio" class="btn-check" name="amount_type" id="modal_amount_type_installment" value="installment" checked>
+                            <label class="btn btn-outline-primary" for="modal_amount_type_installment">Valor da Parcela</label>
+                        </div>
+                        <small class="form-text text-muted">Escolha se deseja informar o valor total ou o valor de cada parcela</small>
+                    </div>
+
                     <div class="row">
                         <div class="col-4">
-                            <div class="mb-3">
-                                <label for="modal_amount" class="form-label">Valor <span class="text-danger">*</span></label>
+                            <div class="mb-3" id="modal_totalAmountGroup">
+                                <label for="modal_total_amount" class="form-label">Valor Total <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <span class="input-group-text">R$</span>
-                                    <input type="number" step="0.01" min="0.01" class="form-control" id="modal_amount" name="amount" required>
+                                    <input type="number" step="0.01" min="0.01" class="form-control" id="modal_total_amount" name="total_amount">
                                 </div>
+                                <small class="form-text text-muted">O valor será dividido igualmente entre as parcelas</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="mb-3" id="modal_installmentAmountGroup" style="display: none;">
+                                <label for="modal_installment_amount" class="form-label">Valor da Parcela <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" min="0.01" class="form-control" id="modal_installment_amount" name="installment_amount">
+                                </div>
+                                <small class="form-text text-muted">O valor total será calculado automaticamente</small>
                                 <div class="invalid-feedback"></div>
                             </div>
                         </div>
@@ -243,6 +265,12 @@
                                 <input type="date" class="form-control" id="modal_transaction_date" name="transaction_date" value="{{ date('Y-m-d') }}" required>
                                 <div class="invalid-feedback"></div>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="modal_calculatedAmountInfo" style="display: none;">
+                        <div class="alert alert-info">
+                            <strong>Valor Total Calculado:</strong> <span id="modal_calculated_total">R$ 0,00</span>
                         </div>
                     </div>
 
@@ -300,8 +328,8 @@
     cursor: pointer;
 }
 .invoice-item.active {
-    background-color: #e7f3ff;
-    border-left: 3px solid #0d6efd;
+    background-color: {{ $selectedCard->color ?? '#0d6efd' }}20;
+    border-left: 3px solid {{ $selectedCard->color ?? '#0d6efd' }};
     color: #000 !important;
 }
 .invoice-item.active h6,
@@ -313,7 +341,7 @@
     background-color: #f8f9fa;
 }
 .invoice-item.active:hover {
-    background-color: #d0e7ff;
+    background-color: {{ $selectedCard->color ?? '#0d6efd' }}30;
 }
 .invoice-item .btn-group-vertical {
     pointer-events: auto;
@@ -372,7 +400,8 @@ function loadInvoiceDetails(month, year) {
     })
     .then(html => {
         const cardName = '{{ $selectedCard->name }}';
-        detailsContainer.innerHTML = '<div class="card mb-4"><div class="card-header"><h5 class="mb-0"><i class="bi bi-receipt"></i> Fatura - ' + cardName + ' (' + month + '/' + year + ')</h5></div><div class="card-body">' + html + '</div></div>';
+        const cardColor = '{{ $selectedCard->color ?? "#0d6efd" }}';
+        detailsContainer.innerHTML = '<div class="card mb-4" style="border-top: 4px solid ' + cardColor + ';"><div class="card-header" style="background-color: ' + cardColor + '20;"><h5 class="mb-0"><i class="bi bi-receipt"></i> Fatura - ' + cardName + ' (' + month + '/' + year + ')</h5></div><div class="card-body">' + html + '</div></div>';
     })
     .catch(error => {
         console.error('Error:', error);
@@ -463,11 +492,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalInstallmentsGroup = document.getElementById('modal_installmentsGroup');
     const modalInstallmentsPreview = document.getElementById('modal_installmentsPreview');
     const modalInstallmentsTotalInput = document.getElementById('modal_installments_total');
-    const modalAmountInput = document.getElementById('modal_amount');
+    const modalTotalAmountInput = document.getElementById('modal_total_amount');
+    const modalInstallmentAmountInput = document.getElementById('modal_installment_amount');
+    const modalTotalAmountGroup = document.getElementById('modal_totalAmountGroup');
+    const modalInstallmentAmountGroup = document.getElementById('modal_installmentAmountGroup');
+    const modalCalculatedAmountInfo = document.getElementById('modal_calculatedAmountInfo');
+    const modalCalculatedTotal = document.getElementById('modal_calculated_total');
+    const modalAmountTypeRadios = document.querySelectorAll('input[name="amount_type"]');
     const modalTransactionDateInput = document.getElementById('modal_transaction_date');
     const modalPreviewContent = document.getElementById('modal_previewContent');
     const transactionModalForm = document.getElementById('transactionModalForm');
     const newTransactionModal = new bootstrap.Modal(document.getElementById('newTransactionModal'));
+    
+    // Hidden input for amount (will be set before form submission)
+    let modalAmountHiddenInput = document.getElementById('modal_amount');
+    if (!modalAmountHiddenInput) {
+        modalAmountHiddenInput = document.createElement('input');
+        modalAmountHiddenInput.type = 'hidden';
+        modalAmountHiddenInput.name = 'amount';
+        modalAmountHiddenInput.id = 'modal_amount';
+        transactionModalForm.appendChild(modalAmountHiddenInput);
+    }
 
     function updateModalFormVisibility() {
         const type = modalTypeSelect.value;
@@ -494,13 +539,57 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function updateModalAmountType() {
+        const amountType = document.querySelector('input[name="amount_type"]:checked')?.value || 'total';
+        
+        if (amountType === 'total') {
+            modalTotalAmountGroup.style.display = 'block';
+            modalInstallmentAmountGroup.style.display = 'none';
+            modalCalculatedAmountInfo.style.display = 'none';
+            modalTotalAmountInput.required = true;
+            modalInstallmentAmountInput.required = false;
+        } else {
+            modalTotalAmountGroup.style.display = 'none';
+            modalInstallmentAmountGroup.style.display = 'block';
+            modalTotalAmountInput.required = false;
+            modalInstallmentAmountInput.required = true;
+            calculateModalTotalFromInstallment();
+        }
+        updateModalInstallmentsPreview();
+    }
+
+    function calculateModalTotalFromInstallment() {
+        const installments = parseInt(modalInstallmentsTotalInput.value) || 1;
+        const installmentAmount = parseFloat(modalInstallmentAmountInput.value) || 0;
+        
+        if (installments > 0 && installmentAmount > 0) {
+            const totalAmount = installmentAmount * installments;
+            modalCalculatedTotal.textContent = 'R$ ' + totalAmount.toFixed(2).replace('.', ',');
+            modalCalculatedAmountInfo.style.display = 'block';
+        } else {
+            modalCalculatedAmountInfo.style.display = 'none';
+        }
+    }
+
+    function getModalAmount() {
+        const amountType = document.querySelector('input[name="amount_type"]:checked')?.value || 'total';
+        
+        if (amountType === 'total') {
+            return parseFloat(modalTotalAmountInput.value) || 0;
+        } else {
+            const installments = parseInt(modalInstallmentsTotalInput.value) || 1;
+            const installmentAmount = parseFloat(modalInstallmentAmountInput.value) || 0;
+            return installmentAmount * installments;
+        }
+    }
+
     function updateModalInstallmentsPreview() {
         const installments = parseInt(modalInstallmentsTotalInput.value) || 1;
-        const amount = parseFloat(modalAmountInput.value) || 0;
+        const totalAmount = getModalAmount();
         const date = modalTransactionDateInput.value;
 
-        if (installments > 1 && amount > 0 && date) {
-            const installmentAmount = amount / installments;
+        if (installments > 1 && totalAmount > 0 && date) {
+            const installmentAmount = totalAmount / installments;
             
             // Parse date string (YYYY-MM-DD) to avoid timezone issues
             const [year, month, day] = date.split('-').map(Number);
@@ -516,7 +605,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     month: '2-digit',
                     year: 'numeric'
                 });
-                preview += `<li>Parcela ${i}/${installments}: R$ ${installmentAmount.toFixed(2)} - ${formattedDate}</li>`;
+                preview += `<li>Parcela ${i}/${installments}: R$ ${installmentAmount.toFixed(2).replace('.', ',')} - ${formattedDate}</li>`;
             }
             preview += '</ul>';
             
@@ -534,24 +623,52 @@ document.addEventListener('DOMContentLoaded', function() {
         modalPaymentMethodSelect.addEventListener('change', updateModalFormVisibility);
     }
     if (modalInstallmentsTotalInput) {
-        modalInstallmentsTotalInput.addEventListener('input', updateModalInstallmentsPreview);
+        modalInstallmentsTotalInput.addEventListener('input', function() {
+            updateModalInstallmentsPreview();
+            calculateModalTotalFromInstallment();
+        });
     }
-    if (modalAmountInput) {
-        modalAmountInput.addEventListener('input', updateModalInstallmentsPreview);
+    if (modalTotalAmountInput) {
+        modalTotalAmountInput.addEventListener('input', updateModalInstallmentsPreview);
+    }
+    if (modalInstallmentAmountInput) {
+        modalInstallmentAmountInput.addEventListener('input', function() {
+            calculateModalTotalFromInstallment();
+            updateModalInstallmentsPreview();
+        });
     }
     if (modalTransactionDateInput) {
         modalTransactionDateInput.addEventListener('change', updateModalInstallmentsPreview);
     }
+    
+    // Amount type radio buttons
+    modalAmountTypeRadios.forEach(radio => {
+        radio.addEventListener('change', updateModalAmountType);
+    });
 
     // Initialize modal form visibility
     if (modalTypeSelect) {
         updateModalFormVisibility();
     }
+    updateModalAmountType();
 
     // Handle modal form submission
     if (transactionModalForm) {
         transactionModalForm.addEventListener('submit', function(e) {
             e.preventDefault();
+            
+            // Calculate and set the amount before submission
+            const totalAmount = getModalAmount();
+            modalAmountHiddenInput.value = totalAmount;
+            
+            // Validate amount
+            if (totalAmount <= 0) {
+                const amountType = document.querySelector('input[name="amount_type"]:checked')?.value || 'total';
+                const input = amountType === 'total' ? modalTotalAmountInput : modalInstallmentAmountInput;
+                input.classList.add('is-invalid');
+                input.parentElement.querySelector('.invalid-feedback').textContent = 'O valor deve ser maior que zero.';
+                return;
+            }
             
             const submitButton = this.querySelector('button[type="submit"]');
             const originalText = submitButton.innerHTML;
@@ -632,7 +749,9 @@ document.addEventListener('DOMContentLoaded', function() {
         modalTypeSelect.value = 'EXPENSE';
         modalPaymentMethodSelect.value = 'CREDIT';
         modalCardIdSelect.value = '{{ $selectedCard->id }}';
+        document.getElementById('modal_amount_type_installment').checked = true;
         updateModalFormVisibility();
+        updateModalAmountType();
     });
 
     // Reset form when modal is closed
@@ -644,7 +763,9 @@ document.addEventListener('DOMContentLoaded', function() {
         modalTypeSelect.value = 'EXPENSE';
         modalPaymentMethodSelect.value = 'CREDIT';
         modalCardIdSelect.value = '{{ $selectedCard->id }}';
+        document.getElementById('modal_amount_type_installment').checked = true;
         updateModalFormVisibility();
+        updateModalAmountType();
     });
 });
 </script>

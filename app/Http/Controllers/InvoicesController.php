@@ -51,8 +51,13 @@ class InvoicesController extends Controller
         $selectedYear = $request->query('year');
         
         if ($selectedMonth && $selectedYear) {
-            // Use invoice from query parameters
-            $selectedInvoice = $this->invoiceService->getOrCreateInvoice($selectedCard, (int) $selectedMonth, (int) $selectedYear);
+            // Query parameters are now due date month/year (cycle_month/cycle_year)
+            $selectedInvoice = $this->invoiceService->getInvoiceByDueMonth($selectedCard, (int) $selectedMonth, (int) $selectedYear);
+            
+            if (!$selectedInvoice) {
+                // If not found, try to find by closing month (for backward compatibility)
+                $selectedInvoice = $this->invoiceService->getOrCreateInvoice($selectedCard, (int) $selectedMonth, (int) $selectedYear);
+            }
         } else {
             // Use first unpaid invoice from list (oldest, which is first in the ordered list)
             $selectedInvoice = $invoices->where('is_paid', false)->first();
@@ -68,7 +73,9 @@ class InvoicesController extends Controller
             }
         }
         
-        $cycleDates = $this->invoiceService->calculateCycleDates($selectedCard, $selectedInvoice->cycle_month, $selectedInvoice->cycle_year);
+        // Use closing_date to calculate cycle dates (not cycle_month/cycle_year which is now based on due date)
+        $closingDate = \Carbon\Carbon::parse($selectedInvoice->closing_date);
+        $cycleDates = $this->invoiceService->calculateCycleDates($selectedCard, $closingDate->month, $closingDate->year);
         
         $transactions = $selectedCard->transactions()
             ->where('payment_method', 'CREDIT')
@@ -103,6 +110,8 @@ class InvoicesController extends Controller
 
     /**
      * Show invoice details
+     * @param int $month Month of due date (cycle_month)
+     * @param int $year Year of due date (cycle_year)
      */
     public function show(Request $request, string $cardId, int $month, int $year)
     {
@@ -112,10 +121,16 @@ class InvoicesController extends Controller
             abort(404);
         }
 
-        $invoice = $this->invoiceService->getOrCreateInvoice($card, $month, $year);
+        // Get invoice by due date month/year (cycle_month/cycle_year)
+        $invoice = $this->invoiceService->getInvoiceByDueMonth($card, $month, $year);
 
-        // Get transactions for this invoice cycle
-        $cycleDates = $this->invoiceService->calculateCycleDates($card, $month, $year);
+        if (!$invoice) {
+            abort(404, 'Fatura não encontrada.');
+        }
+
+        // Get transactions for this invoice cycle using closing_date
+        $closingDate = \Carbon\Carbon::parse($invoice->closing_date);
+        $cycleDates = $this->invoiceService->calculateCycleDates($card, $closingDate->month, $closingDate->year);
         
         $transactions = $card->transactions()
             ->where('payment_method', 'CREDIT')
@@ -138,6 +153,8 @@ class InvoicesController extends Controller
 
     /**
      * Mark invoice as paid
+     * @param int $month Month of due date (cycle_month)
+     * @param int $year Year of due date (cycle_year)
      */
     public function markAsPaid(Request $request, string $cardId, int $month, int $year)
     {
@@ -147,7 +164,12 @@ class InvoicesController extends Controller
             abort(404);
         }
 
-        $invoice = $this->invoiceService->getOrCreateInvoice($card, $month, $year);
+        $invoice = $this->invoiceService->getInvoiceByDueMonth($card, $month, $year);
+
+        if (!$invoice) {
+            abort(404, 'Fatura não encontrada.');
+        }
+
         $this->invoiceService->markAsPaid($invoice);
 
         return redirect()->back()
@@ -156,6 +178,8 @@ class InvoicesController extends Controller
 
     /**
      * Mark invoice as unpaid
+     * @param int $month Month of due date (cycle_month)
+     * @param int $year Year of due date (cycle_year)
      */
     public function markAsUnpaid(Request $request, string $cardId, int $month, int $year)
     {
@@ -165,7 +189,12 @@ class InvoicesController extends Controller
             abort(404);
         }
 
-        $invoice = $this->invoiceService->getOrCreateInvoice($card, $month, $year);
+        $invoice = $this->invoiceService->getInvoiceByDueMonth($card, $month, $year);
+
+        if (!$invoice) {
+            abort(404, 'Fatura não encontrada.');
+        }
+
         $this->invoiceService->markAsUnpaid($invoice);
 
         return redirect()->back()
@@ -174,6 +203,8 @@ class InvoicesController extends Controller
 
     /**
      * Recalculate invoice
+     * @param int $month Month of due date (cycle_month)
+     * @param int $year Year of due date (cycle_year)
      */
     public function recalculate(Request $request, string $cardId, int $month, int $year)
     {
@@ -183,7 +214,12 @@ class InvoicesController extends Controller
             abort(404);
         }
 
-        $invoice = $this->invoiceService->getOrCreateInvoice($card, $month, $year);
+        $invoice = $this->invoiceService->getInvoiceByDueMonth($card, $month, $year);
+
+        if (!$invoice) {
+            abort(404, 'Fatura não encontrada.');
+        }
+
         $this->invoiceService->recalculateInvoice($invoice);
 
         return redirect()->back()
