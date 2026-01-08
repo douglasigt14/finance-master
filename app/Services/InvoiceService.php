@@ -57,8 +57,15 @@ class InvoiceService
         $closingDay = $card->closing_day;
         $dueDay = $card->due_day;
 
-        // Closing date is the closing_day of the month
-        $closingDate = Carbon::create($year, $month, $closingDay);
+        // Create the first day of the month to check last day
+        $firstDayOfMonth = Carbon::create($year, $month, 1);
+        $lastDayOfMonth = $firstDayOfMonth->copy()->endOfMonth()->day;
+        
+        // If closing_day doesn't exist in this month, use last day of month
+        $actualClosingDay = min($closingDay, $lastDayOfMonth);
+        
+        // Closing date is the closing_day of the month (or last day if closing_day is too high)
+        $closingDate = Carbon::create($year, $month, $actualClosingDay);
 
         // Start of cycle is closing_day + 1 of previous month
         $startDate = $closingDate->copy()->subMonth()->addDay();
@@ -66,8 +73,22 @@ class InvoiceService
         // End of cycle is closing_day of current month
         $endDate = $closingDate->copy();
 
-        // Due date is due_day of next month
-        $dueDate = $closingDate->copy()->addMonth()->day($dueDay);
+        // Due date is due_day of next month (month after closing)
+        // Calculate next month directly to avoid date overflow issues
+        $nextMonth = $month + 1;
+        $nextYear = $year;
+        
+        // Handle year rollover
+        if ($nextMonth > 12) {
+            $nextMonth = 1;
+            $nextYear += 1;
+        }
+        
+        // Get last day of next month to validate due_day
+        $firstDayOfNextMonth = Carbon::create($nextYear, $nextMonth, 1);
+        $lastDayOfNextMonth = $firstDayOfNextMonth->copy()->endOfMonth()->day;
+        $actualDueDay = min($dueDay, $lastDayOfNextMonth);
+        $dueDate = Carbon::create($nextYear, $nextMonth, $actualDueDay);
 
         return [
             'start' => $startDate,
@@ -129,11 +150,17 @@ class InvoiceService
         $this->getOrCreateInvoice($card, $currentMonth, $currentYear);
 
         // Create future invoices (next 3 months from current cycle)
-        $baseDate = Carbon::create($currentYear, $currentMonth, 1);
+        // Calculate future months/years directly to avoid date overflow issues
         for ($i = 1; $i <= 3; $i++) {
-            $futureDate = $baseDate->copy()->addMonths($i);
-            $futureMonth = $futureDate->month;
-            $futureYear = $futureDate->year;
+            $futureMonth = $currentMonth + $i;
+            $futureYear = $currentYear;
+            
+            // Handle year rollover
+            while ($futureMonth > 12) {
+                $futureMonth -= 12;
+                $futureYear += 1;
+            }
+            
             $this->getOrCreateInvoice($card, $futureMonth, $futureYear);
         }
 

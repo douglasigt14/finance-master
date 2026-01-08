@@ -28,9 +28,10 @@ class InvoicesController extends Controller
                 ->with('info', 'Por favor, crie um cartão primeiro para visualizar as faturas.');
         }
 
-        // Get selected card or first card
-        $selectedCard = $cardId 
-            ? $this->cardService->getById((int) $cardId, $user->id)
+        // Get selected card from query or route parameter or first card
+        $requestCardId = $request->query('card_id') ?? $cardId;
+        $selectedCard = $requestCardId 
+            ? $this->cardService->getById((int) $requestCardId, $user->id)
             : $cards->first();
 
         if (!$selectedCard) {
@@ -40,16 +41,54 @@ class InvoicesController extends Controller
         // Get all invoices for the card
         $invoices = $this->invoiceService->getInvoicesByCard($selectedCard);
 
-        // Get current invoice
+        // Get current invoice (for summary calculations)
         $currentInvoice = $this->invoiceService->getCurrentInvoice($selectedCard);
         $availableCredit = $this->invoiceService->getAvailableCredit($selectedCard);
+
+        // Get selected invoice from query or use first unpaid invoice from list (oldest)
+        $selectedMonth = $request->query('month');
+        $selectedYear = $request->query('year');
+        
+        if ($selectedMonth && $selectedYear) {
+            // Use invoice from query parameters
+            $selectedInvoice = $this->invoiceService->getOrCreateInvoice($selectedCard, (int) $selectedMonth, (int) $selectedYear);
+        } else {
+            // Use first unpaid invoice from list (oldest, which is first in the ordered list)
+            $selectedInvoice = $invoices->where('is_paid', false)->first();
+            
+            // If no unpaid invoices exist, use first invoice from list
+            if (!$selectedInvoice) {
+                $selectedInvoice = $invoices->first();
+            }
+            
+            // If still no invoices exist, fallback to current invoice
+            if (!$selectedInvoice) {
+                $selectedInvoice = $currentInvoice;
+            }
+        }
+        
+        $cycleDates = $this->invoiceService->calculateCycleDates($selectedCard, $selectedInvoice->cycle_month, $selectedInvoice->cycle_year);
+        
+        $transactions = $selectedCard->transactions()
+            ->where('payment_method', 'CREDIT')
+            ->where('type', 'EXPENSE')
+            ->whereBetween('transaction_date', [
+                $cycleDates['start']->format('Y-m-d'),
+                $cycleDates['end']->format('Y-m-d')
+            ])
+            ->with('category')
+            ->orderBy('transaction_date')
+            ->get();
 
         return view('invoices.index', compact(
             'cards',
             'selectedCard',
             'invoices',
             'currentInvoice',
-            'availableCredit'
+            'availableCredit',
+            'selectedInvoice',
+            'transactions',
+            'cycleDates'
         ));
     }
 
@@ -79,6 +118,11 @@ class InvoicesController extends Controller
             ->with('category')
             ->orderBy('transaction_date')
             ->get();
+
+        // If it's an AJAX request, return only the details partial
+        if ($request->ajax()) {
+            return view('invoices.partials.details', compact('card', 'invoice', 'transactions', 'cycleDates'))->render();
+        }
 
         return view('invoices.show', compact('card', 'invoice', 'transactions', 'cycleDates'));
     }
