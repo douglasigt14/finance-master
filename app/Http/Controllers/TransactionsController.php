@@ -232,7 +232,7 @@ class TransactionsController extends Controller
                 $validated
             );
 
-            return redirect()->route('transactions.index')
+            return redirect()->back()
                 ->with('success', 'Grupo de transações atualizado com sucesso.');
         } catch (\Exception $e) {
             return redirect()->back()

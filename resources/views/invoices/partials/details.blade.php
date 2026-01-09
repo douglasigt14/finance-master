@@ -111,6 +111,7 @@
                             <th>Valor</th>
                             <th>Parcelas</th>
                             <th>Devedor</th>
+                            <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -125,14 +126,21 @@
                                     </span>
                                 </td>
                                 <td>R$ {{ number_format($transaction->amount, 2, ',', '.') }}</td>
-                                <td>
+                                <td class="text-center">
                                     @if($transaction->installments_total > 1)
-                                        <span class="badge bg-secondary">
-                                            {{ $transaction->installment_number }}/{{ $transaction->installments_total }}
-                                        </span>
+                                        <small class="fst-italic">{{ $transaction->installment_number }}/{{ $transaction->installments_total }}</small>
                                     @endif
                                 </td>
                                 <td>{{ $transaction->debtor->name ?? '' }}</td>
+                                <td>
+                                    @if($transaction->group_uuid)
+                                        <div class="btn-group">
+                                            <a href="{{ route('transactions.edit-group', $transaction->id) }}" class="btn btn-sm btn-outline-info" title="Editar Grupo">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </a> 
+                                        </div>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -140,7 +148,7 @@
                         <tr>
                             <th colspan="4" class="text-end">Total:</th>
                             <th>R$ {{ number_format($transactions->sum('amount'), 2, ',', '.') }}</th>
-                            <th colspan="2"></th>
+                            <th colspan="3"></th>
                         </tr>
                     </tfoot>
                 </table>
