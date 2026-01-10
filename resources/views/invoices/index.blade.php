@@ -309,6 +309,59 @@
                         <small class="form-text text-muted">Selecione se emprestou o cartão para alguém</small>
                         <div class="invalid-feedback"></div>
                     </div>
+
+                    <hr>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="modal_is_recurring" name="is_recurring" value="1">
+                            <label class="form-check-label" for="modal_is_recurring">
+                                <strong>Tornar esta transação recorrente</strong>
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">Marque para criar uma transação que se repete automaticamente</small>
+                    </div>
+
+                    <div id="modal_recurringFields" style="display: none;">
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <label for="modal_frequency" class="form-label">Frequência <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="modal_frequency" name="frequency">
+                                        <option value="MONTHLY" selected>Mensal</option>
+                                        <option value="WEEKLY">Semanal</option>
+                                        <option value="YEARLY">Anual</option>
+                                    </select>
+                                    <div class="invalid-feedback"></div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3" id="modal_dayOfMonthGroup">
+                                    <label for="modal_day_of_month" class="form-label">Dia do Mês <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" id="modal_day_of_month" name="day_of_month" min="1" max="31" value="{{ date('d') }}">
+                                    <small class="form-text text-muted">Dia em que a transação será gerada (1-31)</small>
+                                    <div class="invalid-feedback"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <label for="modal_recurring_start_date" class="form-label">Data de Início <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="modal_recurring_start_date" name="recurring_start_date" value="{{ date('Y-m-d') }}">
+                                    <div class="invalid-feedback"></div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <label for="modal_recurring_end_date" class="form-label">Data de Término (Opcional)</label>
+                                    <input type="date" class="form-control" id="modal_recurring_end_date" name="recurring_end_date">
+                                    <small class="form-text text-muted">Deixe em branco para continuar indefinidamente</small>
+                                    <div class="invalid-feedback"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -646,11 +699,62 @@ document.addEventListener('DOMContentLoaded', function() {
         radio.addEventListener('change', updateModalAmountType);
     });
 
+    // Recurring transaction fields
+    const modalIsRecurringCheckbox = document.getElementById('modal_is_recurring');
+    const modalRecurringFields = document.getElementById('modal_recurringFields');
+    const modalFrequencySelect = document.getElementById('modal_frequency');
+    const modalDayOfMonthGroup = document.getElementById('modal_dayOfMonthGroup');
+    const modalDayOfMonthInput = document.getElementById('modal_day_of_month');
+
+    function updateRecurringFieldsVisibility() {
+        if (modalIsRecurringCheckbox && modalRecurringFields) {
+            if (modalIsRecurringCheckbox.checked) {
+                modalRecurringFields.style.display = 'block';
+                // Set day of month from transaction date and update start date
+                if (modalTransactionDateInput) {
+                    const date = modalTransactionDateInput.value;
+                    if (date) {
+                        const [year, month, day] = date.split('-').map(Number);
+                        if (modalDayOfMonthInput) {
+                            modalDayOfMonthInput.value = day;
+                        }
+                        const recurringStartDateInput = document.getElementById('modal_recurring_start_date');
+                        if (recurringStartDateInput) {
+                            recurringStartDateInput.value = date;
+                        }
+                    }
+                }
+                updateFrequencyFields();
+            } else {
+                modalRecurringFields.style.display = 'none';
+            }
+        }
+    }
+
+    function updateFrequencyFields() {
+        if (modalFrequencySelect && modalDayOfMonthGroup) {
+            if (modalFrequencySelect.value === 'MONTHLY') {
+                modalDayOfMonthGroup.style.display = 'block';
+            } else {
+                modalDayOfMonthGroup.style.display = 'none';
+            }
+        }
+    }
+
+    if (modalIsRecurringCheckbox) {
+        modalIsRecurringCheckbox.addEventListener('change', updateRecurringFieldsVisibility);
+    }
+    if (modalFrequencySelect) {
+        modalFrequencySelect.addEventListener('change', updateFrequencyFields);
+    }
+
     // Initialize modal form visibility
     if (modalTypeSelect) {
         updateModalFormVisibility();
     }
     updateModalAmountType();
+    updateRecurringFieldsVisibility();
+    updateFrequencyFields();
 
     // Handle modal form submission
     if (transactionModalForm) {
@@ -681,7 +785,50 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const formData = new FormData(this);
             
-            fetch(this.action, {
+            // Check if it's a recurring transaction
+            const isRecurring = modalIsRecurringCheckbox && modalIsRecurringCheckbox.checked;
+            let submitUrl = this.action;
+            
+            if (isRecurring) {
+                // Validate recurring fields
+                const frequency = modalFrequencySelect.value;
+                const dayOfMonth = modalDayOfMonthInput ? parseInt(modalDayOfMonthInput.value) : null;
+                const recurringStartDate = document.getElementById('modal_recurring_start_date').value;
+                const recurringEndDate = document.getElementById('modal_recurring_end_date').value;
+                
+                if (!frequency || !recurringStartDate) {
+                    alert('Por favor, preencha todos os campos obrigatórios da transação recorrente.');
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalText;
+                    return;
+                }
+                
+                if (frequency === 'MONTHLY' && (!dayOfMonth || dayOfMonth < 1 || dayOfMonth > 31)) {
+                    alert('Por favor, informe um dia do mês válido (1-31).');
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalText;
+                    return;
+                }
+                
+                // Submit to recurring transactions endpoint
+                submitUrl = '{{ route("recurring-transactions.store") }}';
+                
+                // Rename fields to match recurring transaction structure
+                formData.set('start_date', recurringStartDate);
+                if (recurringEndDate) {
+                    formData.set('end_date', recurringEndDate);
+                }
+                formData.set('frequency', frequency);
+                if (frequency === 'MONTHLY' && dayOfMonth) {
+                    formData.set('day_of_month', dayOfMonth);
+                }
+                
+                // Remove transaction_date and installments_total for recurring transactions
+                formData.delete('transaction_date');
+                formData.delete('installments_total');
+            }
+            
+            fetch(submitUrl, {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -702,8 +849,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Show success message
                 const alertDiv = document.createElement('div');
                 alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                const message = isRecurring 
+                    ? 'Transação recorrente criada com sucesso!'
+                    : (data.message || 'Transação criada com sucesso.');
                 alertDiv.innerHTML = `
-                    <strong>Sucesso!</strong> ${data.message || 'Transação criada com sucesso.'}
+                    <strong>Sucesso!</strong> ${message}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 `;
                 document.querySelector('.row.mb-4').insertAdjacentElement('afterend', alertDiv);

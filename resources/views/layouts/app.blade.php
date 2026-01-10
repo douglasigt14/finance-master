@@ -47,6 +47,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ route('recurring-transactions.index') }}">
+                            <i class="bi bi-arrow-repeat"></i> Recorrentes
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{{ route('invoices.index') }}">
                             <i class="bi bi-receipt"></i> Faturas
                         </a>

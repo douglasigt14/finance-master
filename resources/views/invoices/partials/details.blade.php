@@ -100,8 +100,13 @@
         @if($transactions->isEmpty())
             <p class="text-muted">Nenhuma transação neste ciclo.</p>
         @else
+            <div class="mb-3">
+                <input type="text" id="transactionSearch" class="form-control" 
+                       placeholder="Buscar transações por descrição, nome na fatura, categoria..." 
+                       onkeyup="filterTransactions()">
+            </div>
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover" id="transactionsTable">
                     <thead>
                         <tr>
                             <th>Data</th>
@@ -156,3 +161,29 @@
         @endif
     </div>
 </div>
+
+<script>
+function filterTransactions() {
+    const input = document.getElementById('transactionSearch');
+    if (!input) return;
+    
+    const filter = input.value.toLowerCase();
+    const table = document.getElementById('transactionsTable');
+    if (!table) return;
+    
+    const rows = table.getElementsByTagName('tr');
+
+    for (let i = 1; i < rows.length; i++) { // Start from 1 to skip header
+        const row = rows[i];
+        // Skip footer row
+        if (row.parentElement.tagName === 'TFOOT') continue;
+        
+        const text = row.textContent || row.innerText;
+        if (text.toLowerCase().indexOf(filter) > -1) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    }
+}
+</script>

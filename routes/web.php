@@ -6,6 +6,7 @@ use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DebtorsController;
 use App\Http\Controllers\InvoicesController;
+use App\Http\Controllers\RecurringTransactionsController;
 use App\Http\Controllers\TransactionsController;
 use Illuminate\Support\Facades\Route;
 
@@ -63,4 +64,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/invoices/card/{cardId}/{month}/{year}/mark-paid', [InvoicesController::class, 'markAsPaid'])->name('invoices.mark-paid');
     Route::post('/invoices/card/{cardId}/{month}/{year}/mark-unpaid', [InvoicesController::class, 'markAsUnpaid'])->name('invoices.mark-unpaid');
     Route::post('/invoices/card/{cardId}/{month}/{year}/recalculate', [InvoicesController::class, 'recalculate'])->name('invoices.recalculate');
+
+    // Recurring Transactions
+    Route::resource('recurring-transactions', RecurringTransactionsController::class);
+    Route::post('/recurring-transactions/generate', [RecurringTransactionsController::class, 'generate'])->name('recurring-transactions.generate');
 });
