@@ -454,7 +454,35 @@ function loadInvoiceDetails(month, year) {
     .then(html => {
         const cardName = '{{ $selectedCard->name }}';
         const cardColor = '{{ $selectedCard->color ?? "#0d6efd" }}';
+        
+        // Inserir o HTML
         detailsContainer.innerHTML = '<div class="card mb-4" style="border-top: 4px solid ' + cardColor + ';"><div class="card-header" style="background-color: ' + cardColor + '20;"><h5 class="mb-0"><i class="bi bi-receipt"></i> Fatura - ' + cardName + ' (' + month + '/' + year + ')</h5></div><div class="card-body">' + html + '</div></div>';
+        
+        // Extrair e executar scripts manualmente (innerHTML não executa scripts automaticamente)
+        const scripts = detailsContainer.querySelectorAll('script');
+        scripts.forEach(function(oldScript) {
+            const newScript = document.createElement('script');
+            Array.from(oldScript.attributes).forEach(attr => {
+                newScript.setAttribute(attr.name, attr.value);
+            });
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+        });
+        
+        // Renderizar gráficos após carregar o conteúdo via AJAX
+        // Usar um delay maior para garantir que os scripts foram executados e o DOM atualizado
+        setTimeout(function() {
+            if (typeof window.renderCategoryCharts === 'function') {
+                window.renderCategoryCharts();
+            } else {
+                // Se ainda não existe, tentar novamente
+                setTimeout(function() {
+                    if (typeof window.renderCategoryCharts === 'function') {
+                        window.renderCategoryCharts();
+                    }
+                }, 200);
+            }
+        }, 250);
     })
     .catch(error => {
         console.error('Error:', error);

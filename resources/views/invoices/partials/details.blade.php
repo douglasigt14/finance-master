@@ -1,40 +1,77 @@
 <!-- Invoice Summary -->
+
 <div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card text-white bg-primary">
-            <div class="card-body">
-                <h6 class="card-title">Valor Total</h6>
-                <h3 class="mb-0">R$ {{ number_format($invoice->total_amount, 2, ',', '.') }}</h3>
-            </div>
+ <div class="col-md-3">
+    <div class="card text-white bg-primary mb-2">
+        <div class="card-body">
+            <h6 class="card-title">Valor Total</h6>
+            <h3 class="mb-0">R$ {{ number_format($invoice->total_amount, 2, ',', '.') }}</h3>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-success">
-            <div class="card-body">
-                <h6 class="card-title">Valor Pago</h6>
-                <h3 class="mb-0">R$ {{ number_format($invoice->paid_amount, 2, ',', '.') }}</h3>
-            </div>
+    <div class="card text-white bg-success mb-2">
+        <div class="card-body">
+            <h6 class="card-title">Valor Pago</h6>
+            <h3 class="mb-0">R$ {{ number_format($invoice->paid_amount, 2, ',', '.') }}</h3>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-warning">
-            <div class="card-body">
-                <h6 class="card-title">Restante</h6>
-                <h3 class="mb-0">R$ {{ number_format($invoice->remaining_amount, 2, ',', '.') }}</h3>
-            </div>
+    <div class="card text-white bg-warning mb-2">
+        <div class="card-body">
+            <h6 class="card-title">Restante</h6>
+            <h3 class="mb-0">R$ {{ number_format($invoice->remaining_amount, 2, ',', '.') }}</h3>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h6 class="card-title">Status</h6>
-                @if($invoice->is_paid)
-                    <span class="badge bg-success fs-6">Paga</span>
-                @else
-                    <span class="badge bg-warning fs-6">Não Paga</span>
-                @endif
-            </div>
+    <div class="card mb-2">
+        <div class="card-body">
+            <h6 class="card-title">Status</h6>
+            @if($invoice->is_paid)
+                <span class="badge bg-success fs-6">Paga</span>
+            @else
+                <span class="badge bg-warning fs-6">Não Paga</span>
+            @endif
         </div>
+    </div>
+ </div>
+ <div class="col-md-9">
+        @php
+            // Agrupar transações por categoria
+            $categoryData = $transactions->groupBy('category_id')->map(function ($group) {
+                $category = $group->first()->category;
+                return [
+                    'name' => $category->name ?? 'Sem categoria',
+                    'color' => $category->color ?? '#6c757d',
+                    'amount' => $group->sum('amount'),
+                    'count' => $group->count()
+                ];
+            })->sortByDesc('amount')->values();
+        @endphp
+        
+        @if($categoryData->isNotEmpty())
+            <div class="card h-100">
+                <div class="card-header" style="background-color: {{ $card->color ?? '#0d6efd' }}20;">
+                    <h6 class="mb-0"><i class="bi bi-pie-chart"></i> Distribuição por Categoria</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div style="position: relative; height: 300px;">
+                                <canvas id="categoryPieChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div style="position: relative; height: 300px;">
+                                <canvas id="categoryBarChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @else
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center justify-content-center" style="min-height: 200px;">
+                    <p class="text-muted mb-0">Nenhuma transação para exibir gráficos</p>
+                </div>
+            </div>
+        @endif
     </div>
 </div>
 
@@ -185,5 +222,147 @@ function filterTransactions() {
             row.style.display = 'none';
         }
     }
+}
+
+// Função para renderizar gráficos (tornada global para ser chamada após AJAX)
+window.renderCategoryCharts = function() {
+    @if($categoryData->isNotEmpty())
+    // Verificar se Chart.js está disponível
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js não está disponível');
+        return;
+    }
+    
+    // Aguardar um pouco para garantir que os elementos foram renderizados após AJAX
+    setTimeout(function() {
+        const pieCtx = document.getElementById('categoryPieChart');
+        const barCtx = document.getElementById('categoryBarChart');
+        
+        // Verificar se os elementos existem
+        if (!pieCtx || !barCtx) {
+            console.log('Elementos dos gráficos não encontrados');
+            return;
+        }
+        
+        // Destruir gráficos existentes nos canvas específicos (importante ao trocar de fatura)
+        if (pieCtx.chart) {
+            pieCtx.chart.destroy();
+            pieCtx.chart = null;
+        }
+        if (barCtx.chart) {
+            barCtx.chart.destroy();
+            barCtx.chart = null;
+        }
+        
+        // Dados da fatura atual (gerados no servidor - sempre específicos da fatura exibida)
+        const categoryData = @json($categoryData);
+        
+        if (!categoryData || categoryData.length === 0) {
+            console.log('Nenhum dado de categoria disponível');
+            return;
+        }
+        
+        // Preparar dados da fatura atual
+        const labels = categoryData.map(item => item.name);
+        const amounts = categoryData.map(item => parseFloat(item.amount));
+        const colors = categoryData.map(item => item.color);
+        const percentages = amounts.map(amount => {
+            const total = amounts.reduce((a, b) => a + b, 0);
+            return total > 0 ? ((amount / total) * 100).toFixed(1) : '0';
+        });
+        
+        // Gráfico de Pizza - sempre criar novo para a fatura atual
+        pieCtx.chart = new Chart(pieCtx, {
+                type: 'pie',
+                data: {
+                    labels: labels.map((label, i) => `${label} (${percentages[i]}%)`),
+                    datasets: [{
+                        data: amounts,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = 'R$ ' + context.parsed.toFixed(2).replace('.', ',');
+                                    const percentage = percentages[context.dataIndex] + '%';
+                                    return label.split(' (')[0] + ': ' + value + ' (' + percentage + ')';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        
+        // Gráfico de Barras - sempre criar novo para a fatura atual
+        barCtx.chart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Valor (R$)',
+                        data: amounts,
+                        backgroundColor: colors,
+                        borderColor: colors.map(color => color + '80'),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = 'R$ ' + context.parsed.y.toFixed(2).replace('.', ',');
+                                    const percentage = percentages[context.dataIndex] + '%';
+                                    return value + ' (' + percentage + ')';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'R$ ' + value.toFixed(2).replace('.', ',');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+    }, 150); // Delay para garantir que o DOM foi atualizado após AJAX
+    @endif
+};
+
+// Renderizar gráficos quando o DOM estiver pronto
+// Nota: Esta função também será chamada após carregar conteúdo via AJAX
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(renderCategoryCharts, 100);
+    });
+} else {
+    setTimeout(renderCategoryCharts, 100);
 }
 </script>
