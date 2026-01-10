@@ -115,10 +115,22 @@ class TransactionService
                 $year = $installmentDate->year;
 
                 // Determine which cycle this installment belongs to
-                if ($installmentDate->day < $card->closing_day) {
-                    // Installment is in the previous cycle
-                    $month = $installmentDate->copy()->subMonth()->month;
-                    $year = $installmentDate->copy()->subMonth()->year;
+                // The cycle starts on (closing_day + 1) of previous month and ends on closing_day of current month
+                // So if transaction is on or before closing_day, it belongs to the cycle that closes on that day (current month)
+                // If transaction is after closing_day, it belongs to the next cycle
+                if ($installmentDate->day <= $card->closing_day) {
+                    // Installment is in the cycle that closes on this month's closing_day
+                    // month and year are already correct
+                } else {
+                    // Installment is after closing_day, so it belongs to the next cycle
+                    $month = $installmentDate->copy()->addMonth()->month;
+                    $year = $installmentDate->copy()->addMonth()->year;
+                    
+                    // Handle year rollover
+                    if ($month > 12) {
+                        $month = 1;
+                        $year += 1;
+                    }
                 }
 
                 // Create invoice for this cycle if it doesn't exist
@@ -298,9 +310,22 @@ class TransactionService
                     $month = $installmentDate->month;
                     $year = $installmentDate->year;
 
-                    if ($installmentDate->day < $card->closing_day) {
-                        $month = $installmentDate->copy()->subMonth()->month;
-                        $year = $installmentDate->copy()->subMonth()->year;
+                    // The cycle starts on (closing_day + 1) of previous month and ends on closing_day of current month
+                    // So if transaction is on or before closing_day, it belongs to the cycle that closes on that day (current month)
+                    // If transaction is after closing_day, it belongs to the next cycle
+                    if ($installmentDate->day <= $card->closing_day) {
+                        // Transaction is in the cycle that closes on this month's closing_day
+                        // month and year are already correct
+                    } else {
+                        // Transaction is after closing_day, so it belongs to the next cycle
+                        $month = $installmentDate->copy()->addMonth()->month;
+                        $year = $installmentDate->copy()->addMonth()->year;
+                        
+                        // Handle year rollover
+                        if ($month > 12) {
+                            $month = 1;
+                            $year += 1;
+                        }
                     }
 
                     $this->invoiceService->getOrCreateInvoice($card, $month, $year);
@@ -415,15 +440,26 @@ class TransactionService
      */
     private function recalculateInvoiceForDate(Card $card, Carbon $date): void
     {
-        $now = Carbon::now();
         $month = $date->month;
         $year = $date->year;
 
         // Determine which cycle this transaction belongs to
-        if ($date->day < $card->closing_day) {
-            // Transaction is in the previous cycle
-            $month = $date->copy()->subMonth()->month;
-            $year = $date->copy()->subMonth()->year;
+        // The cycle starts on (closing_day + 1) of previous month and ends on closing_day of current month
+        // So if transaction is on or before closing_day, it belongs to the cycle that closes on that day (current month)
+        // If transaction is after closing_day, it belongs to the next cycle
+        if ($date->day <= $card->closing_day) {
+            // Transaction is in the cycle that closes on this month's closing_day
+            // month and year are already correct
+        } else {
+            // Transaction is after closing_day, so it belongs to the next cycle
+            $month = $date->copy()->addMonth()->month;
+            $year = $date->copy()->addMonth()->year;
+            
+            // Handle year rollover
+            if ($month > 12) {
+                $month = 1;
+                $year += 1;
+            }
         }
 
         $invoice = $this->invoiceService->getOrCreateInvoice($card, $month, $year);
@@ -450,9 +486,22 @@ class TransactionService
             $month = $dateCarbon->month;
             $year = $dateCarbon->year;
 
-            if ($dateCarbon->day < $card->closing_day) {
-                $month = $dateCarbon->copy()->subMonth()->month;
-                $year = $dateCarbon->copy()->subMonth()->year;
+            // The cycle starts on (closing_day + 1) of previous month and ends on closing_day of current month
+            // So if transaction is on or before closing_day, it belongs to the cycle that closes on that day (current month)
+            // If transaction is after closing_day, it belongs to the next cycle
+            if ($dateCarbon->day <= $card->closing_day) {
+                // Transaction is in the cycle that closes on this month's closing_day
+                // month and year are already correct
+            } else {
+                // Transaction is after closing_day, so it belongs to the next cycle
+                $month = $dateCarbon->copy()->addMonth()->month;
+                $year = $dateCarbon->copy()->addMonth()->year;
+                
+                // Handle year rollover
+                if ($month > 12) {
+                    $month = 1;
+                    $year += 1;
+                }
             }
 
             return ['month' => $month, 'year' => $year];

@@ -33,7 +33,7 @@
  </div>
  <div class="col-md-9">
         @php
-            // Agrupar transações por categoria
+            // Agrupar transações por categoria (para gráfico de barras)
             $categoryData = $transactions->groupBy('category_id')->map(function ($group) {
                 $category = $group->first()->category;
                 return [
@@ -43,24 +43,39 @@
                     'count' => $group->count()
                 ];
             })->sortByDesc('amount')->values();
+            
+            // Agrupar transações por devedor (para gráfico de pizza)
+            $debtorData = $transactions->groupBy('debtor_id')->map(function ($group) {
+                $debtor = $group->first()->debtor;
+                return [
+                    'name' => $debtor ? $debtor->name : 'Meu',
+                    'amount' => $group->sum('amount'),
+                    'count' => $group->count()
+                ];
+            })->sortByDesc('amount')->values();
+            
+            // Paleta de cores para devedores
+            $debtorColors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6f42c1', '#fd7e14', '#20c997', '#0dcaf0', '#6610f2', '#e83e8c'];
         @endphp
         
-        @if($categoryData->isNotEmpty())
+        @if($categoryData->isNotEmpty() || $debtorData->isNotEmpty())
             <div class="card h-100">
                 <div class="card-header" style="background-color: {{ $card->color ?? '#0d6efd' }}20;">
-                    <h6 class="mb-0"><i class="bi bi-pie-chart"></i> Distribuição por Categoria</h6>
+                    <h6 class="mb-0"><i class="bi bi-pie-chart"></i> Distribuição</h6>
                 </div>
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
                             <div style="position: relative; height: 300px;">
-                                <canvas id="categoryPieChart"></canvas>
+                                <canvas id="debtorPieChart"></canvas>
                             </div>
+                            <p class="text-center mt-2 mb-0"><small class="text-muted">Por Devedor</small></p>
                         </div>
                         <div class="col-md-6">
                             <div style="position: relative; height: 300px;">
                                 <canvas id="categoryBarChart"></canvas>
                             </div>
+                            <p class="text-center mt-2 mb-0"><small class="text-muted">Por Categoria</small></p>
                         </div>
                     </div>
                 </div>
@@ -226,7 +241,7 @@ function filterTransactions() {
 
 // Função para renderizar gráficos (tornada global para ser chamada após AJAX)
 window.renderCategoryCharts = function() {
-    @if($categoryData->isNotEmpty())
+    @if(($categoryData->isNotEmpty() || $debtorData->isNotEmpty()))
     // Verificar se Chart.js está disponível
     if (typeof Chart === 'undefined') {
         console.error('Chart.js não está disponível');
@@ -235,50 +250,49 @@ window.renderCategoryCharts = function() {
     
     // Aguardar um pouco para garantir que os elementos foram renderizados após AJAX
     setTimeout(function() {
-        const pieCtx = document.getElementById('categoryPieChart');
+        const debtorPieCtx = document.getElementById('debtorPieChart');
         const barCtx = document.getElementById('categoryBarChart');
         
         // Verificar se os elementos existem
-        if (!pieCtx || !barCtx) {
+        if (!debtorPieCtx || !barCtx) {
             console.log('Elementos dos gráficos não encontrados');
             return;
         }
         
         // Destruir gráficos existentes nos canvas específicos (importante ao trocar de fatura)
-        if (pieCtx.chart) {
-            pieCtx.chart.destroy();
-            pieCtx.chart = null;
+        if (debtorPieCtx.chart) {
+            debtorPieCtx.chart.destroy();
+            debtorPieCtx.chart = null;
         }
         if (barCtx.chart) {
             barCtx.chart.destroy();
             barCtx.chart = null;
         }
         
-        // Dados da fatura atual (gerados no servidor - sempre específicos da fatura exibida)
+        // Dados de devedores (gerados no servidor - sempre específicos da fatura exibida)
+        const debtorData = @json($debtorData);
+        const debtorColors = @json($debtorColors);
+        
+        // Dados de categorias (gerados no servidor - sempre específicos da fatura exibida)
         const categoryData = @json($categoryData);
         
-        if (!categoryData || categoryData.length === 0) {
-            console.log('Nenhum dado de categoria disponível');
-            return;
-        }
-        
-        // Preparar dados da fatura atual
-        const labels = categoryData.map(item => item.name);
-        const amounts = categoryData.map(item => parseFloat(item.amount));
-        const colors = categoryData.map(item => item.color);
-        const percentages = amounts.map(amount => {
-            const total = amounts.reduce((a, b) => a + b, 0);
-            return total > 0 ? ((amount / total) * 100).toFixed(1) : '0';
-        });
-        
-        // Gráfico de Pizza - sempre criar novo para a fatura atual
-        pieCtx.chart = new Chart(pieCtx, {
+        // Gráfico de Pizza por Devedor
+        if (debtorData && debtorData.length > 0) {
+            const debtorLabels = debtorData.map(item => item.name);
+            const debtorAmounts = debtorData.map(item => parseFloat(item.amount));
+            const debtorChartColors = debtorData.map((item, index) => debtorColors[index % debtorColors.length]);
+            const debtorPercentages = debtorAmounts.map(amount => {
+                const total = debtorAmounts.reduce((a, b) => a + b, 0);
+                return total > 0 ? ((amount / total) * 100).toFixed(1) : '0';
+            });
+            
+            debtorPieCtx.chart = new Chart(debtorPieCtx, {
                 type: 'pie',
                 data: {
-                    labels: labels.map((label, i) => `${label} (${percentages[i]}%)`),
+                    labels: debtorLabels.map((label, i) => `${label} (${debtorPercentages[i]}%)`),
                     datasets: [{
-                        data: amounts,
-                        backgroundColor: colors,
+                        data: debtorAmounts,
+                        backgroundColor: debtorChartColors,
                         borderWidth: 2,
                         borderColor: '#fff'
                     }]
@@ -301,7 +315,7 @@ window.renderCategoryCharts = function() {
                                 label: function(context) {
                                     const label = context.label || '';
                                     const value = 'R$ ' + context.parsed.toFixed(2).replace('.', ',');
-                                    const percentage = percentages[context.dataIndex] + '%';
+                                    const percentage = debtorPercentages[context.dataIndex] + '%';
                                     return label.split(' (')[0] + ': ' + value + ' (' + percentage + ')';
                                 }
                             }
@@ -309,17 +323,27 @@ window.renderCategoryCharts = function() {
                     }
                 }
             });
+        }
         
-        // Gráfico de Barras - sempre criar novo para a fatura atual
-        barCtx.chart = new Chart(barCtx, {
+        // Gráfico de Barras por Categoria
+        if (categoryData && categoryData.length > 0) {
+            const categoryLabels = categoryData.map(item => item.name);
+            const categoryAmounts = categoryData.map(item => parseFloat(item.amount));
+            const categoryChartColors = categoryData.map(item => item.color);
+            const categoryPercentages = categoryAmounts.map(amount => {
+                const total = categoryAmounts.reduce((a, b) => a + b, 0);
+                return total > 0 ? ((amount / total) * 100).toFixed(1) : '0';
+            });
+            
+            barCtx.chart = new Chart(barCtx, {
                 type: 'bar',
                 data: {
-                    labels: labels,
+                    labels: categoryLabels,
                     datasets: [{
                         label: 'Valor (R$)',
-                        data: amounts,
-                        backgroundColor: colors,
-                        borderColor: colors.map(color => color + '80'),
+                        data: categoryAmounts,
+                        backgroundColor: categoryChartColors,
+                        borderColor: categoryChartColors.map(color => color + '80'),
                         borderWidth: 1
                     }]
                 },
@@ -334,7 +358,7 @@ window.renderCategoryCharts = function() {
                             callbacks: {
                                 label: function(context) {
                                     const value = 'R$ ' + context.parsed.y.toFixed(2).replace('.', ',');
-                                    const percentage = percentages[context.dataIndex] + '%';
+                                    const percentage = categoryPercentages[context.dataIndex] + '%';
                                     return value + ' (' + percentage + ')';
                                 }
                             }
@@ -352,6 +376,7 @@ window.renderCategoryCharts = function() {
                     }
                 }
             });
+        }
     }, 150); // Delay para garantir que o DOM foi atualizado após AJAX
     @endif
 };

@@ -90,11 +90,25 @@ class InvoiceService
         // Closing date is the closing_day of the month (or last day if closing_day is too high)
         $closingDate = Carbon::create($year, $month, $actualClosingDay);
 
-        // Start of cycle is closing_day + 1 of previous month
-        $startDate = $closingDate->copy()->subMonth()->addDay();
+        // Start of cycle is closing_day of previous month (not closing_day + 1)
+        // We need to calculate this carefully to handle month boundaries
+        $previousMonth = $month - 1;
+        $previousYear = $year;
+        if ($previousMonth < 1) {
+            $previousMonth = 12;
+            $previousYear -= 1;
+        }
+        
+        // Get the last day of the previous month
+        $firstDayOfPreviousMonth = Carbon::create($previousYear, $previousMonth, 1);
+        $lastDayOfPreviousMonth = $firstDayOfPreviousMonth->copy()->endOfMonth()->day;
+        
+        // Calculate the start day: closing_day, but ensure it doesn't exceed the last day of previous month
+        $startDay = min($closingDay, $lastDayOfPreviousMonth);
+        $startDate = Carbon::create($previousYear, $previousMonth, $startDay);
 
-        // End of cycle is closing_day of current month
-        $endDate = $closingDate->copy();
+        // End of cycle is closing_day - 1 of current month (not the closing_day itself)
+        $endDate = $closingDate->copy()->subDay();
 
         // Determine if due date is in the same month or next month
         // If due_day > closing_day, due date can be in the same month (e.g., fecha 07/01, vence 10/01)

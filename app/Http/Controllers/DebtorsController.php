@@ -6,13 +6,16 @@ use App\DTOs\CreateDebtorDTO;
 use App\DTOs\UpdateDebtorDTO;
 use App\Http\Requests\StoreDebtorRequest;
 use App\Http\Requests\UpdateDebtorRequest;
+use App\Models\Card;
 use App\Services\DebtorService;
+use App\Services\InvoiceService;
 use Illuminate\Http\Request;
 
 class DebtorsController extends Controller
 {
     public function __construct(
-        private DebtorService $debtorService
+        private DebtorService $debtorService,
+        private InvoiceService $invoiceService
     ) {
     }
 
@@ -22,7 +25,67 @@ class DebtorsController extends Controller
     public function index(Request $request)
     {
         $debtors = $this->debtorService->getAllByUser($request->user()->id);
-        return view('debtors.index', compact('debtors'));
+        
+        // Get all active cards for the user
+        $cards = Card::where('user_id', $request->user()->id)
+            ->active()
+            ->get();
+        
+        // Get next cycle transactions for all cards, grouped by debtor
+        $debtorTransactions = collect();
+        $cycleInfo = collect();
+        
+        foreach ($cards as $card) {
+            $currentInvoice = $this->invoiceService->getCurrentInvoice($card);
+            if ($currentInvoice) {
+                // Get next cycle (add 1 month to closing date)
+                $currentClosingDate = \Carbon\Carbon::parse($currentInvoice->closing_date);
+                $nextClosingMonth = $currentClosingDate->copy()->addMonth()->month;
+                $nextClosingYear = $currentClosingDate->copy()->addMonth()->year;
+                
+                // Handle year rollover
+                if ($nextClosingMonth > 12) {
+                    $nextClosingMonth = 1;
+                    $nextClosingYear += 1;
+                }
+                
+                // Get or create next invoice
+                $nextInvoice = $this->invoiceService->getOrCreateInvoice($card, $nextClosingMonth, $nextClosingYear);
+                
+                if ($nextInvoice) {
+                    $nextClosingDate = \Carbon\Carbon::parse($nextInvoice->closing_date);
+                    $cycleDates = $this->invoiceService->calculateCycleDates($card, $nextClosingDate->month, $nextClosingDate->year);
+                    
+                    // Store cycle info for display
+                    $cycleInfo->push([
+                        'card' => $card->name,
+                        'start' => $cycleDates['start']->format('d/m/Y'),
+                        'end' => $cycleDates['end']->format('d/m/Y'),
+                    ]);
+                    
+                    // Get transactions from THIS SPECIFIC CARD in its cycle date range
+                    $transactions = $card->transactions()
+                        ->where('payment_method', 'CREDIT')
+                        ->where('type', 'EXPENSE')
+                        ->whereBetween('transaction_date', [
+                            $cycleDates['start']->format('Y-m-d'),
+                            $cycleDates['end']->format('Y-m-d')
+                        ])
+                        ->with(['category', 'debtor', 'card'])
+                        ->orderBy('transaction_date')
+                        ->get();
+                    
+                    $debtorTransactions = $debtorTransactions->merge($transactions);
+                }
+            }
+        }
+        
+        // Group transactions by debtor (including null for transactions without debtor)
+        $transactionsByDebtor = $debtorTransactions->groupBy(function ($transaction) {
+            return $transaction->debtor_id ?? 'sem_devedor';
+        });
+        
+        return view('debtors.index', compact('debtors', 'transactionsByDebtor', 'cycleInfo'));
     }
 
     /**
