@@ -61,7 +61,7 @@
         </div>
     @else
         @foreach($allDebtorsWithTransactions as $debtorData)
-            <div class="card mb-4">
+            <div class="card mb-4" @if($debtorData['name'] === 'Meu') id="meu-debtor-card" @endif>
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
                         <i class="bi bi-person"></i> {{ $debtorData['name'] }}
@@ -105,19 +105,46 @@
                                 </thead>
                                 <tbody>
                                     @foreach($debtorData['transactions'] as $transaction)
-                                    <tr>
+                                    @php
+                                        $cardName = $transaction->card ? $transaction->card->name : ($transaction->payment_method === 'PIX' ? 'PIX' : ($transaction->payment_method === 'CASH' ? 'Dinheiro' : ($transaction->payment_method === 'DEBIT' ? 'Débito' : 'Sem Cartão')));
+                                        $categoryName = $transaction->category->name ?? 'Sem Categoria';
+                                        
+                                        $installmentStatus = 'Compras à Vista';
+                                        if ($transaction->installments_total > 1) {
+                                            $remaining = $transaction->installments_total - $transaction->installment_number;
+                                            if ($remaining === 0) {
+                                                $installmentStatus = 'Última Parcela';
+                                            } elseif ($remaining === 1) {
+                                                $installmentStatus = 'Penúltima Parcela';
+                                            } elseif ($remaining === 2) {
+                                                $installmentStatus = 'Antepenúltima Parcela';
+                                            } else {
+                                                $installmentStatus = 'Faltam mais de 4 Parcelas';
+                                            }
+                                        }
+                                    @endphp
+                                    <tr data-meu-card="{{ $cardName }}" 
+                                        data-meu-category="{{ $categoryName }}" 
+                                        data-meu-installment="{{ $installmentStatus }}"
+                                        class="meu-transaction-row">
                                         <td>{{ $transaction->transaction_date->format('d/m/Y') }}</td>
                                         <td>{{ $transaction->card_description ?? '-' }}</td>
                                         <td>{{ $transaction->description ?? '-' }}</td>
                                         <td>
                                             <span class="badge" style="background-color: {{ $transaction->category->color ?? '#6c757d' }}">
-                                                {{ $transaction->category->name }}
+                                                {{ $categoryName }}
                                             </span>
                                         </td>
                                         <td>
-                                            <span class="badge" style="background-color: {{ $transaction->card->color ?? '#0d6efd' }}20; color: {{ $transaction->card->color ?? '#0d6efd' }}">
-                                                {{ $transaction->card->name }}
-                                            </span>
+                                            @if($transaction->card)
+                                                <span class="badge" style="background-color: {{ $transaction->card->color ?? '#0d6efd' }}20; color: {{ $transaction->card->color ?? '#0d6efd' }}">
+                                                    {{ $transaction->card->name }}
+                                                </span>
+                                            @else
+                                                <span class="badge bg-secondary">
+                                                    {{ $transaction->payment_method === 'PIX' ? 'PIX' : ($transaction->payment_method === 'CASH' ? 'Dinheiro' : ($transaction->payment_method === 'DEBIT' ? 'Débito' : 'Sem Cartão')) }}
+                                                </span>
+                                            @endif
                                         </td>
                                         <td>R$ {{ number_format($transaction->amount, 2, ',', '.') }}</td>
                                         <td class="text-center">
@@ -150,6 +177,283 @@
                 </div>
             </div>
         @endforeach
+        
+        @if($chartDataByCard->isNotEmpty() || $chartDataByCategory->isNotEmpty() || $chartDataByInstallmentStatus->isNotEmpty())
+            <div class="row mt-4">
+                @if($chartDataByCard->isNotEmpty())
+                    <div class="col-md-6 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-credit-card"></i> Distribuição por Cartão (Meu)</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chartByCard" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+                
+                @if($chartDataByCategory->isNotEmpty())
+                    <div class="col-md-6 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-tags"></i> Distribuição por Categoria (Meu)</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chartByCategory" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+                
+                @if($chartDataByInstallmentStatus->isNotEmpty())
+                    <div class="col-md-12 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Distribuição por Status de Parcelas (Meu)</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chartByInstallmentStatus" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+            </div>
+        @endif
     @endif
 @endif
 @endsection
+
+@push('scripts')
+@if($chartDataByCard->isNotEmpty() || $chartDataByCategory->isNotEmpty() || $chartDataByInstallmentStatus->isNotEmpty())
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    @if($chartDataByCard->isNotEmpty())
+    // Chart by Card
+    const ctxCard = document.getElementById('chartByCard');
+    if (ctxCard) {
+        const cardColors = {!! json_encode($chartDataByCard->pluck('color')) !!};
+        const hexToRgba = (hex, alpha = 0.6) => {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+        
+        const chartByCard = new Chart(ctxCard, {
+            type: 'bar',
+            data: {
+                labels: {!! json_encode($chartDataByCard->pluck('label')) !!},
+                datasets: [{
+                    label: 'Valor (R$)',
+                    data: {!! json_encode($chartDataByCard->pluck('amount')) !!},
+                    backgroundColor: cardColors.map(color => hexToRgba(color, 0.6)),
+                    borderColor: cardColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toFixed(2).replace('.', ',');
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return 'R$ ' + context.parsed.y.toFixed(2).replace('.', ',');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    @endif
+    
+    @if($chartDataByCategory->isNotEmpty())
+    // Chart by Category
+    const ctxCategory = document.getElementById('chartByCategory');
+    if (ctxCategory) {
+        const colors = {!! json_encode($chartDataByCategory->pluck('color')) !!};
+        const chartByCategory = new Chart(ctxCategory, {
+            type: 'bar',
+            data: {
+                labels: {!! json_encode($chartDataByCategory->pluck('label')) !!},
+                datasets: [{
+                    label: 'Valor (R$)',
+                    data: {!! json_encode($chartDataByCategory->pluck('amount')) !!},
+                    backgroundColor: colors.map(color => {
+                        // Convert hex to rgba with opacity
+                        const r = parseInt(color.slice(1, 3), 16);
+                        const g = parseInt(color.slice(3, 5), 16);
+                        const b = parseInt(color.slice(5, 7), 16);
+                        return `rgba(${r}, ${g}, ${b}, 0.6)`;
+                    }),
+                    borderColor: colors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const label = chartByCategory.data.labels[index];
+                        filterMeuTable('category', label);
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toFixed(2).replace('.', ',');
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return 'R$ ' + context.parsed.y.toFixed(2).replace('.', ',');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    @endif
+    
+    @if($chartDataByInstallmentStatus->isNotEmpty())
+    // Chart by Installment Status
+    const ctxInstallmentStatus = document.getElementById('chartByInstallmentStatus');
+    if (ctxInstallmentStatus) {
+        const statusColors = {!! json_encode($chartDataByInstallmentStatus->pluck('color')) !!};
+        const hexToRgba = (hex, alpha = 0.6) => {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+        
+        const chartByInstallmentStatus = new Chart(ctxInstallmentStatus, {
+            type: 'bar',
+            data: {
+                labels: {!! json_encode($chartDataByInstallmentStatus->pluck('label')) !!},
+                datasets: [{
+                    label: 'Valor (R$)',
+                    data: {!! json_encode($chartDataByInstallmentStatus->pluck('amount')) !!},
+                    backgroundColor: statusColors.map(color => hexToRgba(color, 0.6)),
+                    borderColor: statusColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const label = chartByInstallmentStatus.data.labels[index];
+                        filterMeuTable('installment', label);
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toFixed(2).replace('.', ',');
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return 'R$ ' + context.parsed.y.toFixed(2).replace('.', ',');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    @endif
+    
+    // Function to filter "Meu" table based on chart clicks
+    let currentFilter = null;
+    
+    function filterMeuTable(type, value) {
+        currentFilter = { type: type, value: value };
+        const rows = document.querySelectorAll('#meu-debtor-card .meu-transaction-row');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            let show = false;
+            
+            if (type === 'card') {
+                show = row.getAttribute('data-meu-card') === value;
+            } else if (type === 'category') {
+                show = row.getAttribute('data-meu-category') === value;
+            } else if (type === 'installment') {
+                show = row.getAttribute('data-meu-installment') === value;
+            }
+            
+            if (show) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Update count in header
+        const header = document.querySelector('#meu-debtor-card .card-header h5 small');
+        if (header) {
+            header.textContent = `(${visibleCount})`;
+        }
+    }
+    
+    function resetMeuTable() {
+        currentFilter = null;
+        const rows = document.querySelectorAll('#meu-debtor-card .meu-transaction-row');
+        const totalCount = rows.length;
+        
+        rows.forEach(row => {
+            row.style.display = '';
+        });
+        
+        // Reset count in header
+        const header = document.querySelector('#meu-debtor-card .card-header h5 small');
+        if (header) {
+            header.textContent = `(${totalCount})`;
+        }
+    }
+    
+    // Click outside to reset filter
+    document.addEventListener('click', function(event) {
+        const charts = document.querySelectorAll('#chartByCard, #chartByCategory, #chartByInstallmentStatus');
+        const isChartClick = Array.from(charts).some(chart => chart.contains(event.target));
+        
+        if (!isChartClick && currentFilter) {
+            resetMeuTable();
+        }
+    });
+});
+</script>
+@endif
+@endpush

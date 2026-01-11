@@ -196,6 +196,12 @@
                                                 <i class="bi bi-pencil-square"></i>
                                             </a> 
                                         </div>
+                                    @else
+                                        <div class="btn-group">
+                                            <a href="{{ route('transactions.edit', $transaction->id) }}" class="btn btn-sm btn-outline-info" title="Editar">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </a>
+                                        </div>
                                     @endif
                                 </td>
                             </tr>
