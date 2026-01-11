@@ -16,6 +16,12 @@
 <div class="card mb-4">
     <div class="card-body">
         <form method="GET" action="{{ route('transactions.index') }}" class="row g-3">
+            <div class="col-md-12 mb-3">
+                <label class="form-label">Buscar</label>
+                <input type="text" name="search" class="form-control" 
+                       placeholder="Buscar por descrição ou nome na fatura..." 
+                       value="{{ request('search') }}">
+            </div>
             <div class="col-md-2">
                 <label class="form-label">Tipo</label>
                 <select name="type" class="form-select">
@@ -42,6 +48,17 @@
                     @foreach($cards as $card)
                         <option value="{{ $card->id }}" {{ request('card_id') == $card->id ? 'selected' : '' }}>
                             {{ $card->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Devedor</label>
+                <select name="debtor_id" class="form-select">
+                    <option value="">Todos</option>
+                    @foreach($debtors as $debtor)
+                        <option value="{{ $debtor->id }}" {{ request('debtor_id') == $debtor->id ? 'selected' : '' }}>
+                            {{ $debtor->name }}
                         </option>
                     @endforeach
                 </select>
@@ -175,6 +192,13 @@
                                             <a href="{{ route('transactions.edit', $transaction->id) }}" class="btn btn-sm btn-outline-secondary" title="Editar">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
+                                            <form action="{{ route('transactions.destroy', $transaction->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir esta transação?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
                                         @endif
                                         @if(!$transaction->is_paid)
                                             <form action="{{ route('transactions.mark-paid', $transaction->id) }}" method="POST" class="d-inline">

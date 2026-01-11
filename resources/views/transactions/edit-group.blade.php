@@ -21,7 +21,7 @@
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle"></i> 
                         <strong>Atenção:</strong> As alterações serão aplicadas a todas as {{ $groupTransactions->count() }} transações do grupo. 
-                        A data será ajustada automaticamente para cada parcela.
+                        A data e o valor serão ajustados automaticamente para cada parcela.
                     </div>
 
                     @php
@@ -51,6 +51,17 @@
                                value="{{ old('transaction_date', $firstTransaction->transaction_date->format('Y-m-d')) }}" required>
                         <small class="form-text text-muted">As datas das demais parcelas serão calculadas automaticamente (mês a mês a partir desta data)</small>
                         @error('transaction_date')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="amount" class="form-label">Valor da Parcela <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" min="0.01" class="form-control @error('amount') is-invalid @enderror" 
+                               id="amount" name="amount" 
+                               value="{{ old('amount', number_format($firstTransaction->amount, 2, '.', '')) }}" required>
+                        <small class="form-text text-muted">O valor será aplicado a todas as parcelas do grupo</small>
+                        @error('amount')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>
@@ -173,16 +184,17 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const transactionDateInput = document.getElementById('transaction_date');
+    const amountInput = document.getElementById('amount');
     const descriptionInput = document.getElementById('description');
     const previewList = document.getElementById('previewList');
     const installmentsTotal = {{ $groupTransactions->count() }};
-    const firstAmount = {{ $groupTransactions->first()->amount }};
 
     function updatePreview() {
         const date = transactionDateInput.value;
+        const amount = parseFloat(amountInput.value) || 0;
         const description = descriptionInput.value || '';
 
-        if (date) {
+        if (date && amount > 0) {
             // Parse date string to avoid timezone issues
             const [year, month, day] = date.split('-').map(Number);
             const baseDate = new Date(year, month - 1, day);
@@ -198,7 +210,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     year: 'numeric'
                 });
                 
-                const installmentAmount = (firstAmount).toFixed(2);
+                const installmentAmount = amount.toFixed(2);
                 preview += `<li>Parcela ${i}/${installmentsTotal}: R$ ${installmentAmount.replace('.', ',')} - ${formattedDate}</li>`;
             }
             
@@ -207,6 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     transactionDateInput.addEventListener('change', updatePreview);
+    amountInput.addEventListener('input', updatePreview);
     descriptionInput.addEventListener('input', function() {
         // Description change doesn't affect preview, but we can update if needed
     });

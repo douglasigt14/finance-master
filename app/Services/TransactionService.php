@@ -36,6 +36,15 @@ class TransactionService
             $query->where('card_id', $filters['card_id']);
         }
 
+        if (isset($filters['debtor_id'])) {
+            if ($filters['debtor_id'] === 'null' || $filters['debtor_id'] === '') {
+                // Filter for transactions without debtor
+                $query->whereNull('debtor_id');
+            } else {
+                $query->where('debtor_id', $filters['debtor_id']);
+            }
+        }
+
         if (isset($filters['payment_method'])) {
             $query->where('payment_method', $filters['payment_method']);
         }
@@ -46,6 +55,14 @@ class TransactionService
 
         if (isset($filters['date_to'])) {
             $query->where('transaction_date', '<=', $filters['date_to']);
+        }
+
+        if (isset($filters['search']) && !empty($filters['search'])) {
+            $search = $filters['search'];
+            $query->where(function($q) use ($search) {
+                $q->where('description', 'like', "%{$search}%")
+                  ->orWhere('card_description', 'like', "%{$search}%");
+            });
         }
 
         return $query->get();
@@ -339,6 +356,11 @@ class TransactionService
                 // Update common fields
                 if (isset($data['category_id'])) {
                     $updateData['category_id'] = $data['category_id'];
+                }
+                
+                // Update amount if provided
+                if (isset($data['amount'])) {
+                    $updateData['amount'] = $data['amount'];
                 }
                 
                 // Update description with installment suffix

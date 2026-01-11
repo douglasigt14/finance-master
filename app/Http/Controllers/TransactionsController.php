@@ -23,7 +23,7 @@ class TransactionsController extends Controller
      */
     public function index(Request $request)
     {
-        $filters = $request->only(['type', 'category_id', 'card_id', 'payment_method', 'date_from', 'date_to']);
+        $filters = $request->only(['type', 'category_id', 'card_id', 'debtor_id', 'payment_method', 'date_from', 'date_to', 'search']);
         $transactions = $this->transactionService->getAllByUser($request->user()->id, $filters);
 
         // Get filters data
@@ -219,6 +219,7 @@ class TransactionsController extends Controller
         $validated = $request->validate([
             'category_id' => 'required|integer|exists:categories,id',
             'transaction_date' => 'required|date',
+            'amount' => 'required|numeric|min:0.01',
             'description' => 'nullable|string|max:1000',
             'card_description' => 'nullable|string|max:1000',
             'card_id' => 'nullable|integer|exists:cards,id',
