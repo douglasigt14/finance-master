@@ -24,7 +24,17 @@ class TransactionsController extends Controller
     public function index(Request $request)
     {
         $filters = $request->only(['type', 'category_id', 'card_id', 'debtor_id', 'payment_method', 'date_from', 'date_to', 'search']);
-        $transactions = $this->transactionService->getAllByUser($request->user()->id, $filters);
+        
+        // Remove empty filters
+        $filters = array_filter($filters, function($value) {
+            return $value !== null && $value !== '';
+        });
+        
+        // Only fetch transactions if at least one filter is applied
+        $transactions = collect();
+        if (!empty($filters)) {
+            $transactions = $this->transactionService->getAllByUser($request->user()->id, $filters);
+        }
 
         // Get filters data
         $categories = Category::where('user_id', $request->user()->id)->orderBy('name')->get();

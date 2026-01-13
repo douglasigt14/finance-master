@@ -61,7 +61,12 @@
         </div>
     @else
         @foreach($allDebtorsWithTransactions as $debtorData)
-            <div class="card mb-4" @if($debtorData['name'] === 'Meu') id="meu-debtor-card" @endif>
+            <div class="card mb-4" 
+                 @if($debtorData['name'] === 'Meu') 
+                     id="meu-debtor-card"
+                 @else
+                     id="debtor-{{ $debtorData['id'] }}"
+                 @endif>
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
                         <i class="bi bi-person"></i> {{ $debtorData['name'] }}
@@ -71,6 +76,13 @@
                     </h5>
                     @if($debtorData['id'] !== null)
                         <div class="btn-group">
+                            @if($debtorData['transactions']->isNotEmpty())
+                                <button type="button" class="btn btn-sm btn-outline-primary" 
+                                        onclick="generateImage('debtor-{{ $debtorData['id'] }}', '{{ $debtorData['name'] }}')"
+                                        title="Gerar Imagem">
+                                    <i class="bi bi-image"></i> Imagem
+                                </button>
+                            @endif
                             <a href="{{ route('debtors.edit', $debtorData['id']) }}" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-pencil"></i>
                             </a>
@@ -454,6 +466,115 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Function to generate image from table
+function generateImage(debtorCardId, debtorName) {
+    const element = document.getElementById(debtorCardId);
+    if (!element) {
+        alert('Erro: elemento não encontrado.');
+        return;
+    }
+    
+    const originalButton = event.target.closest('button');
+    if (!originalButton) {
+        return;
+    }
+    
+    const originalHTML = originalButton.innerHTML;
+    originalButton.disabled = true;
+    originalButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Gerando...';
+    
+    // Find the table in the card
+    const table = element.querySelector('.table-responsive') || element.querySelector('table');
+    
+    if (!table) {
+        alert('Erro: Tabela não encontrada.');
+        originalButton.disabled = false;
+        originalButton.innerHTML = originalHTML;
+        return;
+    }
+    
+    // Create a temporary container for the image
+    const tempContainer = document.createElement('div');
+    tempContainer.style.position = 'absolute';
+    tempContainer.style.left = '-9999px';
+    tempContainer.style.backgroundColor = '#ffffff';
+    tempContainer.style.padding = '20px';
+    tempContainer.style.width = table.offsetWidth + 'px';
+    
+    // Clone the table
+    const clonedTable = table.cloneNode(true);
+    
+    // Remove action buttons and column
+    const buttons = clonedTable.querySelectorAll('.btn-group, .btn, button');
+    buttons.forEach(btn => btn.remove());
+    
+    // Remove "Ações" column
+    const headers = clonedTable.querySelectorAll('thead th');
+    let acoesIndex = -1;
+    headers.forEach((header, index) => {
+        if (header.textContent.trim() === 'Ações') {
+            acoesIndex = index;
+            header.remove();
+        }
+    });
+    
+    if (acoesIndex >= 0) {
+        const rows = clonedTable.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells[acoesIndex]) {
+                cells[acoesIndex].remove();
+            }
+        });
+    }
+    
+    // Add title
+    const title = document.createElement('h5');
+    title.textContent = debtorName;
+    title.style.marginBottom = '15px';
+    title.style.textAlign = 'center';
+    title.style.color = '#333';
+    
+    tempContainer.appendChild(title);
+    tempContainer.appendChild(clonedTable);
+    document.body.appendChild(tempContainer);
+    
+    // Generate image using html2canvas
+    html2canvas(tempContainer, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        allowTaint: true
+    }).then(canvas => {
+        // Convert canvas to blob
+        canvas.toBlob(function(blob) {
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `transacoes_${debtorName.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            // Remove temporary container
+            document.body.removeChild(tempContainer);
+            
+            // Restore button
+            originalButton.disabled = false;
+            originalButton.innerHTML = originalHTML;
+        }, 'image/jpeg', 0.95);
+    }).catch(error => {
+        console.error('Erro ao gerar imagem:', error);
+        alert('Erro ao gerar imagem: ' + error.message);
+        document.body.removeChild(tempContainer);
+        originalButton.disabled = false;
+        originalButton.innerHTML = originalHTML;
+    });
+}
 </script>
 @endif
 @endpush

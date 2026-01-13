@@ -93,10 +93,13 @@
     </div>
 </div>
 
-@if($transactions->isEmpty())
+@if(empty(request()->except(['page'])))
     <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> Nenhuma transação encontrada. 
-        <a href="{{ route('transactions.create') }}">Crie sua primeira transação</a>
+        <i class="bi bi-info-circle"></i> Use os filtros acima para buscar transações.
+    </div>
+@elseif($transactions->isEmpty())
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Nenhuma transação encontrada com os filtros aplicados.
     </div>
 @else
     <div class="card">
@@ -110,6 +113,7 @@
                             <th>Categoria</th>
                             <th>Tipo</th>
                             <th>Forma de Pagamento</th>
+                            <th>Cartão</th>
                             <th>Valor</th>
                             <th>Parcelas</th>
                             <th>Devedor</th>
@@ -144,6 +148,23 @@
                                         </span>
                                     @else
                                         -
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($transaction->card)
+                                        <span class="badge" style="background-color: {{ $transaction->card->color ?? '#6c757d' }}">
+                                            {{ $transaction->card->name }}
+                                        </span>
+                                    @else
+                                        @if($transaction->payment_method === 'PIX')
+                                            <span class="badge bg-primary">PIX</span>
+                                        @elseif($transaction->payment_method === 'CASH')
+                                            <span class="badge bg-secondary">Dinheiro</span>
+                                        @elseif($transaction->payment_method === 'DEBIT')
+                                            <span class="badge bg-info">Débito</span>
+                                        @else
+                                            -
+                                        @endif
                                     @endif
                                 </td>
                                 <td class="{{ $transaction->type === 'INCOME' ? 'text-success' : 'text-danger' }}">
