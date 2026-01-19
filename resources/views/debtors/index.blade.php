@@ -106,13 +106,13 @@
                                 <thead>
                                     <tr>
                                         <th>Data</th>
-                                        <th>Nome na Fatura</th>
-                                        <th>Descrição</th>
-                                        <th>Categoria</th>
-                                        <th>Cartão</th>
                                         <th>Valor</th>
-                                        <th>Parcelas</th>
-                                        <th>Ações</th>
+                                        <th>Descrição</th>
+                                        <th>Nome na Fatura</th>
+                                        <th>Parcela</th>
+                                        <th>Cartão</th>
+                                        <th>Categoria</th>
+                                        <th>Ação</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -140,12 +140,13 @@
                                         data-meu-installment="{{ $installmentStatus }}"
                                         class="meu-transaction-row">
                                         <td>{{ $transaction->transaction_date->format('d/m/Y') }}</td>
-                                        <td>{{ $transaction->card_description ?? '-' }}</td>
+                                        <td>R$ {{ number_format($transaction->amount, 2, ',', '.') }}</td>
                                         <td>{{ $transaction->description ?? '-' }}</td>
-                                        <td>
-                                            <span class="badge" style="background-color: {{ $transaction->category->color ?? '#6c757d' }}">
-                                                {{ $categoryName }}
-                                            </span>
+                                        <td>{{ $transaction->card_description ?? '-' }}</td>
+                                        <td class="text-center">
+                                            @if($transaction->installments_total > 1)
+                                                <small class="fst-italic">{{ $transaction->installment_number }}/{{ $transaction->installments_total }}</small>
+                                            @endif
                                         </td>
                                         <td>
                                             @if($transaction->card)
@@ -158,11 +159,10 @@
                                                 </span>
                                             @endif
                                         </td>
-                                        <td>R$ {{ number_format($transaction->amount, 2, ',', '.') }}</td>
-                                        <td class="text-center">
-                                            @if($transaction->installments_total > 1)
-                                                <small class="fst-italic">{{ $transaction->installment_number }}/{{ $transaction->installments_total }}</small>
-                                            @endif
+                                        <td>
+                                            <span class="badge" style="background-color: {{ $transaction->category->color ?? '#6c757d' }}">
+                                                {{ $categoryName }}
+                                            </span>
                                         </td>
                                         <td>
                                             @if($transaction->group_uuid)
@@ -178,9 +178,9 @@
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <th colspan="5" class="text-end">Total:</th>
+                                    <th class="text-end">Total:</th>
                                     <th>R$ {{ number_format($debtorData['transactions']->sum('amount'), 2, ',', '.') }}</th>
-                                    <th colspan="2"></th>
+                                    <th colspan="6"></th>
                                 </tr>
                             </tfoot>
                         </table>
@@ -509,11 +509,11 @@ function generateImage(debtorCardId, debtorName) {
     const buttons = clonedTable.querySelectorAll('.btn-group, .btn, button');
     buttons.forEach(btn => btn.remove());
     
-    // Remove "Ações" column
+    // Remove "Ação" column
     const headers = clonedTable.querySelectorAll('thead th');
     let acoesIndex = -1;
     headers.forEach((header, index) => {
-        if (header.textContent.trim() === 'Ações') {
+        if (header.textContent.trim() === 'Ação') {
             acoesIndex = index;
             header.remove();
         }
