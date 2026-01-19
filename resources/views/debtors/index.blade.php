@@ -14,13 +14,43 @@
 
 @if(isset($cycleInfo) && $cycleInfo->isNotEmpty())
     <div class="alert alert-info mb-4">
-        <i class="bi bi-info-circle"></i> 
-        <strong>Próximo Ciclo:</strong>
-        @foreach($cycleInfo as $info)
-            <span class="me-3">
-                <strong>{{ $info['card'] }}:</strong> {{ $info['start'] }} até {{ $info['end'] }}
-            </span>
-        @endforeach
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <div class="flex-grow-1">
+                <i class="bi bi-info-circle"></i> 
+                <strong>Próximo Ciclo:</strong>
+                @foreach($cycleInfo as $info)
+                    <span class="me-3">
+                        <strong>{{ $info['card'] }}:</strong> {{ $info['start'] }} até {{ $info['end'] }}
+                    </span>
+                @endforeach
+            </div>
+            <div class="ms-3">
+                <select id="monthSelector" class="form-select form-select-sm" style="min-width: 180px;">
+                    @php
+                        $months = [
+                            1 => 'Janeiro', 2 => 'Fevereiro', 3 => 'Março', 4 => 'Abril',
+                            5 => 'Maio', 6 => 'Junho', 7 => 'Julho', 8 => 'Agosto',
+                            9 => 'Setembro', 10 => 'Outubro', 11 => 'Novembro', 12 => 'Dezembro'
+                        ];
+                        $now = now();
+                        $currentYear = $targetYear ?? $now->copy()->addMonth()->year;
+                        $currentMonth = $targetMonth ?? $now->copy()->addMonth()->month;
+                        $selectedValue = $currentMonth . '-' . $currentYear;
+                    @endphp
+                    @for($year = $currentYear - 1; $year <= $currentYear + 1; $year++)
+                        @foreach($months as $monthNum => $monthName)
+                            @php
+                                $optionValue = $monthNum . '-' . $year;
+                                $isSelected = ($targetMonth ?? null) == $monthNum && ($targetYear ?? null) == $year;
+                            @endphp
+                            <option value="{{ $optionValue }}" @if($isSelected) selected @endif>
+                                {{ $monthName }} - {{ $year }}
+                            </option>
+                        @endforeach
+                    @endfor
+                </select>
+            </div>
+        </div>
     </div>
 @endif
 
@@ -190,7 +220,7 @@
             </div>
         @endforeach
         
-        @if($chartDataByCard->isNotEmpty() || $chartDataByCategory->isNotEmpty() || $chartDataByInstallmentStatus->isNotEmpty())
+        @if($chartDataByCard->isNotEmpty() || $chartDataByCategory->isNotEmpty() || $chartDataByInstallmentStatus->isNotEmpty() || $chartDataByDebtor->isNotEmpty())
             <div class="row mt-4">
                 @if($chartDataByCard->isNotEmpty())
                     <div class="col-md-6 mb-4">
@@ -219,13 +249,26 @@
                 @endif
                 
                 @if($chartDataByInstallmentStatus->isNotEmpty())
-                    <div class="col-md-12 mb-4">
+                    <div class="col-md-6 mb-4">
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Distribuição por Status de Parcelas (Meu)</h5>
                             </div>
                             <div class="card-body">
                                 <canvas id="chartByInstallmentStatus" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+                
+                @if($chartDataByDebtor->isNotEmpty())
+                    <div class="col-md-6 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Distribuição por Devedor</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chartByDebtor" height="300"></canvas>
                             </div>
                         </div>
                     </div>
@@ -237,7 +280,7 @@
 @endsection
 
 @push('scripts')
-@if($chartDataByCard->isNotEmpty() || $chartDataByCategory->isNotEmpty() || $chartDataByInstallmentStatus->isNotEmpty())
+@if($chartDataByCard->isNotEmpty() || $chartDataByCategory->isNotEmpty() || $chartDataByInstallmentStatus->isNotEmpty() || $chartDataByDebtor->isNotEmpty())
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     @if($chartDataByCard->isNotEmpty())
@@ -397,6 +440,54 @@ document.addEventListener('DOMContentLoaded', function() {
                         callbacks: {
                             label: function(context) {
                                 return 'R$ ' + context.parsed.y.toFixed(2).replace('.', ',');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    @endif
+    
+    @if($chartDataByDebtor->isNotEmpty())
+    // Chart by Debtor (Pie Chart)
+    const ctxDebtor = document.getElementById('chartByDebtor');
+    if (ctxDebtor) {
+        const debtorColors = {!! json_encode($chartDataByDebtor->pluck('color')) !!};
+        const hexToRgba = (hex, alpha = 0.8) => {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+        
+        const chartByDebtor = new Chart(ctxDebtor, {
+            type: 'pie',
+            data: {
+                labels: {!! json_encode($chartDataByDebtor->pluck('label')) !!},
+                datasets: [{
+                    label: 'Valor (R$)',
+                    data: {!! json_encode($chartDataByDebtor->pluck('amount')) !!},
+                    backgroundColor: debtorColors.map(color => hexToRgba(color, 0.8)),
+                    borderColor: debtorColors,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return label + ': R$ ' + value.toFixed(2).replace('.', ',') + ' (' + percentage + '%)';
                             }
                         }
                     }
@@ -577,4 +668,19 @@ function generateImage(debtorCardId, debtorName) {
 }
 </script>
 @endif
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const monthSelector = document.getElementById('monthSelector');
+    if (monthSelector) {
+        monthSelector.addEventListener('change', function() {
+            const [month, year] = this.value.split('-');
+            const url = new URL(window.location.href);
+            url.searchParams.set('month', month);
+            url.searchParams.set('year', year);
+            window.location.href = url.toString();
+        });
+    }
+});
+</script>
 @endpush

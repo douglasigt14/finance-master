@@ -32,7 +32,23 @@ class DebtorsController extends Controller
             ->active()
             ->get();
         
-        // Get next cycle transactions for all cards, grouped by debtor
+        // Get selected month/year from request, or default to next month
+        $selectedMonth = $request->query('month');
+        $selectedYear = $request->query('year');
+        
+        $now = \Carbon\Carbon::now();
+        
+        if ($selectedMonth && $selectedYear) {
+            $targetMonth = (int) $selectedMonth;
+            $targetYear = (int) $selectedYear;
+        } else {
+            // Default to next month
+            $nextMonth = $now->copy()->addMonth();
+            $targetMonth = $nextMonth->month;
+            $targetYear = $nextMonth->year;
+        }
+        
+        // Get cycle transactions for all cards, grouped by debtor
         $debtorTransactions = collect();
         $cycleInfo = collect();
         
@@ -41,66 +57,75 @@ class DebtorsController extends Controller
         $allCycleEnds = collect();
         
         foreach ($cards as $card) {
-            $currentInvoice = $this->invoiceService->getCurrentInvoice($card);
-            if ($currentInvoice) {
-                // Get next cycle (add 1 month to closing date)
-                $currentClosingDate = \Carbon\Carbon::parse($currentInvoice->closing_date);
-                $nextClosingMonth = $currentClosingDate->copy()->addMonth()->month;
-                $nextClosingYear = $currentClosingDate->copy()->addMonth()->year;
-                
-                // Handle year rollover
-                if ($nextClosingMonth > 12) {
-                    $nextClosingMonth = 1;
-                    $nextClosingYear += 1;
+            // Find invoice with due date in the target month/year
+            $targetInvoice = $this->invoiceService->getInvoiceByDueMonth($card, $targetMonth, $targetYear);
+            
+            if ($targetInvoice) {
+                // Use the existing invoice
+                $closingDate = \Carbon\Carbon::parse($targetInvoice->closing_date);
+                $cycleDates = $this->invoiceService->calculateCycleDates($card, $closingDate->month, $closingDate->year);
+            } else {
+                // Invoice doesn't exist, try to create it
+                // We need to find the closing month that would result in due date in target month/year
+                // Try using previous month as closing month (common case)
+                $prevMonth = $targetMonth - 1;
+                $prevYear = $targetYear;
+                if ($prevMonth < 1) {
+                    $prevMonth = 12;
+                    $prevYear -= 1;
                 }
                 
-                // Get or create next invoice
-                $nextInvoice = $this->invoiceService->getOrCreateInvoice($card, $nextClosingMonth, $nextClosingYear);
+                // Calculate cycle dates with previous month as closing
+                $cycleDates = $this->invoiceService->calculateCycleDates($card, $prevMonth, $prevYear);
                 
-                if ($nextInvoice) {
-                    $nextClosingDate = \Carbon\Carbon::parse($nextInvoice->closing_date);
-                    $cycleDates = $this->invoiceService->calculateCycleDates($card, $nextClosingDate->month, $nextClosingDate->year);
+                // Check if calculated due date matches target
+                if ($cycleDates['due']->month !== $targetMonth || $cycleDates['due']->year !== $targetYear) {
+                    // Doesn't match, try using target month as closing (for cards where due > closing)
+                    $cycleDates = $this->invoiceService->calculateCycleDates($card, $targetMonth, $targetYear);
                     
-                    // Store cycle info for display
-                    $cycleInfo->push([
-                        'card' => $card->name,
-                        'start' => $cycleDates['start']->format('d/m/Y'),
-                        'end' => $cycleDates['end']->format('d/m/Y'),
-                    ]);
-                    
-                    // Collect cycle dates for overall period calculation
-                    $allCycleStarts->push($cycleDates['start']);
-                    $allCycleEnds->push($cycleDates['end']);
-                    
-                    // Get transactions from THIS SPECIFIC CARD in its cycle date range
-                    $transactions = $card->transactions()
-                        ->where('payment_method', 'CREDIT')
-                        ->where('type', 'EXPENSE')
-                        ->whereBetween('transaction_date', [
-                            $cycleDates['start']->format('Y-m-d'),
-                            $cycleDates['end']->format('Y-m-d')
-                        ])
-                        ->with(['category', 'debtor', 'card'])
-                        ->orderBy('transaction_date')
-                        ->get();
-                    
-                    $debtorTransactions = $debtorTransactions->merge($transactions);
+                    // If still doesn't match, use the dates anyway (edge case)
                 }
+                
+                // Create the invoice if it doesn't exist
+                $this->invoiceService->getOrCreateInvoice($card, $cycleDates['closing']->month, $cycleDates['closing']->year);
             }
+            
+            // Store cycle info for display
+            $cycleInfo->push([
+                'card' => $card->name,
+                'start' => $cycleDates['start']->format('d/m/Y'),
+                'end' => $cycleDates['end']->format('d/m/Y'),
+            ]);
+            
+            // Collect cycle dates for overall period calculation
+            $allCycleStarts->push($cycleDates['start']);
+            $allCycleEnds->push($cycleDates['end']);
+            
+            // Get transactions from THIS SPECIFIC CARD in its cycle date range
+            $transactions = $card->transactions()
+                ->where('payment_method', 'CREDIT')
+                ->where('type', 'EXPENSE')
+                ->whereBetween('transaction_date', [
+                    $cycleDates['start']->format('Y-m-d'),
+                    $cycleDates['end']->format('Y-m-d')
+                ])
+                ->with(['category', 'debtor', 'card'])
+                ->orderBy('transaction_date')
+                ->get();
+            
+            $debtorTransactions = $debtorTransactions->merge($transactions);
         }
         
         // Get transactions without card (PIX, DINHEIRO, DÉBITO, etc.)
-        // Since these transactions don't have a billing cycle, use the same period as the next cycle
-        // Use the overall period from all cards, or default to next month if no cards exist
+        // Since these transactions don't have a billing cycle, use the same period as the selected cycle
+        // Use the overall period from all cards, or default to target month if no cards exist
         if ($allCycleStarts->isNotEmpty() && $allCycleEnds->isNotEmpty()) {
             $overallStart = $allCycleStarts->min();
             $overallEnd = $allCycleEnds->max();
         } else {
-            // Default to next month if no cards
-            $now = \Carbon\Carbon::now();
-            $nextMonth = $now->copy()->addMonth();
-            $overallStart = $nextMonth->copy()->startOfMonth();
-            $overallEnd = $nextMonth->copy()->endOfMonth();
+            // Default to target month if no cards
+            $overallStart = \Carbon\Carbon::create($targetYear, $targetMonth, 1)->startOfMonth();
+            $overallEnd = \Carbon\Carbon::create($targetYear, $targetMonth, 1)->endOfMonth();
         }
         
         // Get transactions without card in the same period as the next cycle
@@ -222,7 +247,52 @@ class DebtorsController extends Controller
             })->values();
         }
         
-        return view('debtors.index', compact('debtors', 'transactionsByDebtor', 'cycleInfo', 'chartDataByCard', 'chartDataByCategory', 'chartDataByInstallmentStatus'));
+        // Prepare chart data for debtors (pie chart showing total value per debtor)
+        $chartDataByDebtor = collect();
+        
+        foreach ($transactionsByDebtor as $debtorId => $transactions) {
+            if ($transactions->isNotEmpty()) {
+                $totalAmount = $transactions->sum('amount');
+                
+                if ($debtorId === 'sem_devedor') {
+                    $chartDataByDebtor->push([
+                        'label' => 'Meu',
+                        'amount' => $totalAmount,
+                        'color' => '#0d6efd' // Default blue
+                    ]);
+                } else {
+                    // Get debtor name
+                    $debtor = $debtors->firstWhere('id', $debtorId);
+                    if ($debtor) {
+                        // Generate a color based on debtor name (consistent color per debtor)
+                        $hash = md5($debtor->name);
+                        $color = '#' . substr($hash, 0, 6);
+                        // Ensure color is not too light
+                        $r = hexdec(substr($color, 1, 2));
+                        $g = hexdec(substr($color, 3, 2));
+                        $b = hexdec(substr($color, 5, 2));
+                        // If too light, darken it
+                        if ($r + $g + $b > 600) {
+                            $r = max(0, $r - 50);
+                            $g = max(0, $g - 50);
+                            $b = max(0, $b - 50);
+                            $color = sprintf('#%02x%02x%02x', $r, $g, $b);
+                        }
+                        
+                        $chartDataByDebtor->push([
+                            'label' => $debtor->name,
+                            'amount' => $totalAmount,
+                            'color' => $color
+                        ]);
+                    }
+                }
+            }
+        }
+        
+        // Sort by amount descending
+        $chartDataByDebtor = $chartDataByDebtor->sortByDesc('amount')->values();
+        
+        return view('debtors.index', compact('debtors', 'transactionsByDebtor', 'cycleInfo', 'chartDataByCard', 'chartDataByCategory', 'chartDataByInstallmentStatus', 'chartDataByDebtor', 'targetMonth', 'targetYear'));
     }
 
     /**
