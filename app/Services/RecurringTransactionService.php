@@ -139,115 +139,189 @@ class RecurringTransactionService
 
     public function delete(RecurringTransaction $recurringTransaction): void
     {
-        $recurringTransaction->delete();
+        DB::transaction(function () use ($recurringTransaction) {
+            // Find and delete all transactions related to this recurring transaction
+            // Use the same criteria used to identify duplicate transactions
+            $relatedTransactions = \App\Models\Transaction::where('user_id', $recurringTransaction->user_id)
+                ->where('card_id', $recurringTransaction->card_id)
+                ->where('amount', $recurringTransaction->amount)
+                ->where('type', $recurringTransaction->type)
+                ->where('category_id', $recurringTransaction->category_id)
+                ->where(function ($query) use ($recurringTransaction) {
+                    if ($recurringTransaction->card_description) {
+                        $query->where('card_description', $recurringTransaction->card_description);
+                    } else {
+                        $query->whereNull('card_description');
+                    }
+                })
+                ->where(function ($query) use ($recurringTransaction) {
+                    if ($recurringTransaction->description) {
+                        $query->where('description', $recurringTransaction->description);
+                    } else {
+                        $query->whereNull('description');
+                    }
+                })
+                ->where(function ($query) use ($recurringTransaction) {
+                    if ($recurringTransaction->debtor_id) {
+                        $query->where('debtor_id', $recurringTransaction->debtor_id);
+                    } else {
+                        $query->whereNull('debtor_id');
+                    }
+                })
+                ->where(function ($query) use ($recurringTransaction) {
+                    if ($recurringTransaction->payment_method) {
+                        $query->where('payment_method', $recurringTransaction->payment_method);
+                    } else {
+                        $query->whereNull('payment_method');
+                    }
+                })
+                ->get();
+            
+            // Delete all related transactions
+            foreach ($relatedTransactions as $transaction) {
+                $transaction->delete();
+            }
+            
+            // Delete the recurring transaction
+            $recurringTransaction->delete();
+        });
     }
 
     public function generateTransactions(): int
     {
-        // Get transactions ready to execute (normal flow)
-        $recurringTransactions = RecurringTransaction::readyToExecute()->get();
-        
-        // Also get transactions that should have generated their first transaction
-        // (start_date in the past but next_execution_date in the future)
-        $pendingFirstExecution = RecurringTransaction::pendingFirstExecution()->get();
-        
-        // Merge and remove duplicates
-        $allRecurringTransactions = $recurringTransactions->merge($pendingFirstExecution)->unique('id');
+        // Get all active recurring transactions
+        $recurringTransactions = RecurringTransaction::active()
+            ->where(function ($q) {
+                $q->whereNull('end_date')
+                    ->orWhere('end_date', '>=', now()->toDateString());
+            })
+            ->get();
         
         $generatedCount = 0;
+        $now = Carbon::now()->startOfDay();
+        $sixMonthsFromNow = $now->copy()->addMonths(6);
 
-        foreach ($allRecurringTransactions as $recurring) {
+        foreach ($recurringTransactions as $recurring) {
             try {
-                DB::transaction(function () use ($recurring, &$generatedCount) {
+                DB::transaction(function () use ($recurring, &$generatedCount, $now, $sixMonthsFromNow) {
                     $startDate = Carbon::parse($recurring->start_date)->startOfDay();
-                    $now = Carbon::now()->startOfDay();
-                    $nextExecutionDate = Carbon::parse($recurring->next_execution_date)->startOfDay();
+                    $currentExecutionDate = Carbon::parse($recurring->next_execution_date)->startOfDay();
                     
-                    // Determine which date to use for the transaction
-                    // If start_date is in the past and next_execution_date is in the future,
-                    // this is the first transaction, so use start_date
-                    $transactionDate = $startDate;
-                    if ($startDate->lte($now) && $nextExecutionDate->gt($now)) {
-                        // First transaction - use start_date
-                        $transactionDate = $startDate;
-                    } else {
-                        // Normal flow - use next_execution_date
-                        $transactionDate = $nextExecutionDate;
+                    // Determine the starting date for generation
+                    // Always start from tomorrow (future transactions only)
+                    // Use next_execution_date if it's in the future, otherwise calculate next from current
+                    $generationStartDate = $currentExecutionDate;
+                    
+                    // If next_execution_date is today or in the past, calculate the next one
+                    if ($currentExecutionDate->lte($now)) {
+                        $generationStartDate = $this->calculateNextExecutionDateFromDate(
+                            $currentExecutionDate,
+                            $recurring->frequency,
+                            $recurring->day_of_month
+                        );
                     }
                     
-                    // Check if transaction already exists to avoid duplicates
-                    $existingTransaction = \App\Models\Transaction::where('user_id', $recurring->user_id)
-                        ->where('transaction_date', $transactionDate->format('Y-m-d'))
-                        ->where('card_id', $recurring->card_id)
-                        ->where('amount', $recurring->amount)
-                        ->where('type', $recurring->type)
-                        ->where('category_id', $recurring->category_id)
-                        ->where(function ($query) use ($recurring) {
-                            if ($recurring->card_description) {
-                                $query->where('card_description', $recurring->card_description);
-                            } else {
-                                $query->whereNull('card_description');
-                            }
-                        })
-                        ->where(function ($query) use ($recurring) {
-                            if ($recurring->description) {
-                                $query->where('description', $recurring->description);
-                            } else {
-                                $query->whereNull('description');
-                            }
-                        })
-                        ->first();
+                    // Always start from tomorrow to avoid generating transactions for today
+                    $tomorrow = $now->copy()->addDay();
+                    if ($generationStartDate->lt($tomorrow)) {
+                        $generationStartDate = $tomorrow;
+                    }
                     
-                    // Skip if transaction already exists
-                    if ($existingTransaction) {
-                        // Update next execution date even if transaction already exists
-                        // to prevent getting stuck
-                        if ($startDate->lte($now) && $nextExecutionDate->gt($now)) {
-                            $recurring->next_execution_date = $this->calculateNextExecutionDateFromDate(
-                                $startDate,
-                                $recurring->frequency,
-                                $recurring->day_of_month
-                            );
-                        } else {
-                            $recurring->next_execution_date = $this->calculateNextExecutionDateFromDate(
-                                $nextExecutionDate,
-                                $recurring->frequency,
-                                $recurring->day_of_month
-                            );
+                    // Generate transactions for the next 6 months
+                    $executionDate = $generationStartDate->copy();
+                    $lastGeneratedDate = null;
+                    
+                    while ($executionDate->lte($sixMonthsFromNow)) {
+                        // Check if we've passed the end_date
+                        if ($recurring->end_date && $executionDate->gt($recurring->end_date)) {
+                            break;
                         }
-                        $recurring->save();
-                        return; // Skip creating duplicate
+                        
+                        // Skip if execution date is before start_date
+                        if ($executionDate->lt($startDate)) {
+                            $executionDate = $this->calculateNextExecutionDateFromDate(
+                                $executionDate,
+                                $recurring->frequency,
+                                $recurring->day_of_month
+                            );
+                            continue;
+                        }
+                        
+                        // Skip if execution date is today or in the past (only generate future transactions)
+                        if ($executionDate->lte($now)) {
+                            $executionDate = $this->calculateNextExecutionDateFromDate(
+                                $executionDate,
+                                $recurring->frequency,
+                                $recurring->day_of_month
+                            );
+                            continue;
+                        }
+                        
+                        // Check if transaction already exists to avoid duplicates
+                        $existingTransaction = \App\Models\Transaction::where('user_id', $recurring->user_id)
+                            ->where('transaction_date', $executionDate->format('Y-m-d'))
+                            ->where('card_id', $recurring->card_id)
+                            ->where('amount', $recurring->amount)
+                            ->where('type', $recurring->type)
+                            ->where('category_id', $recurring->category_id)
+                            ->where(function ($query) use ($recurring) {
+                                if ($recurring->card_description) {
+                                    $query->where('card_description', $recurring->card_description);
+                                } else {
+                                    $query->whereNull('card_description');
+                                }
+                            })
+                            ->where(function ($query) use ($recurring) {
+                                if ($recurring->description) {
+                                    $query->where('description', $recurring->description);
+                                } else {
+                                    $query->whereNull('description');
+                                }
+                            })
+                            ->first();
+                        
+                        // Skip if transaction already exists
+                        if (!$existingTransaction) {
+                            // Create transaction from recurring template
+                            $transactionDTO = CreateTransactionDTO::fromArray([
+                                'user_id' => $recurring->user_id,
+                                'category_id' => $recurring->category_id,
+                                'type' => $recurring->type,
+                                'amount' => $recurring->amount,
+                                'transaction_date' => $executionDate->format('Y-m-d'),
+                                'card_id' => $recurring->card_id,
+                                'payment_method' => $recurring->payment_method,
+                                'description' => $recurring->description,
+                                'card_description' => $recurring->card_description,
+                                'debtor_id' => $recurring->debtor_id,
+                                'installments_total' => 1,
+                            ]);
+
+                            $this->transactionService->create($transactionDTO);
+                            $generatedCount++;
+                            $lastGeneratedDate = $executionDate->copy();
+                        }
+                        
+                        // Calculate next execution date
+                        $executionDate = $this->calculateNextExecutionDateFromDate(
+                            $executionDate,
+                            $recurring->frequency,
+                            $recurring->day_of_month
+                        );
                     }
                     
-                    // Create transaction from recurring template
-                    $transactionDTO = CreateTransactionDTO::fromArray([
-                        'user_id' => $recurring->user_id,
-                        'category_id' => $recurring->category_id,
-                        'type' => $recurring->type,
-                        'amount' => $recurring->amount,
-                        'transaction_date' => $transactionDate->format('Y-m-d'),
-                        'card_id' => $recurring->card_id,
-                        'payment_method' => $recurring->payment_method,
-                        'description' => $recurring->description,
-                        'card_description' => $recurring->card_description,
-                        'debtor_id' => $recurring->debtor_id,
-                        'installments_total' => 1,
-                    ]);
-
-                    $this->transactionService->create($transactionDTO);
-
-                    // Update next execution date
-                    if ($startDate->lte($now) && $nextExecutionDate->gt($now)) {
-                        // First transaction - calculate next from start_date
+                    // Update next execution date to after the last generated date
+                    // This ensures we don't regenerate the same transactions
+                    if ($lastGeneratedDate) {
                         $recurring->next_execution_date = $this->calculateNextExecutionDateFromDate(
-                            $startDate,
+                            $lastGeneratedDate,
                             $recurring->frequency,
                             $recurring->day_of_month
                         );
                     } else {
-                        // Normal flow - add one period to current execution date
+                        // If no transactions were generated, update to next period
                         $recurring->next_execution_date = $this->calculateNextExecutionDateFromDate(
-                            $nextExecutionDate,
+                            $currentExecutionDate,
                             $recurring->frequency,
                             $recurring->day_of_month
                         );
@@ -259,11 +333,10 @@ class RecurringTransactionService
                     }
 
                     $recurring->save();
-                    $generatedCount++;
                 });
             } catch (\Exception $e) {
                 // Log error but continue with other recurring transactions
-                \Log::error("Failed to generate transaction for recurring transaction {$recurring->id}: " . $e->getMessage());
+                \Log::error("Failed to generate transactions for recurring transaction {$recurring->id}: " . $e->getMessage());
             }
         }
 
