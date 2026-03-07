@@ -42,6 +42,22 @@ We would like to extend our thanks to the following sponsors for funding Laravel
 - **[Redberry](https://redberry.international/laravel-development)**
 - **[Active Logic](https://activelogic.com)**
 
+## Docker
+
+Para rodar o projeto com Docker, use `docker compose up -d`.
+
+- Se o `composer install` falhar com permissão ao criar a pasta `vendor`, use:
+  ```bash
+  docker compose exec -u root app sh /var/www/html/docker/composer-install.sh
+  ```
+- Se aparecer *Permission denied* em `storage/logs` ou o SQLite não for encontrado, ajuste permissões e crie o banco com:
+  ```bash
+  docker compose exec -u root app sh /var/www/html/docker/fix-permissions.sh
+  ```
+  Depois rode as migrations: `docker compose exec app php artisan migrate`.
+
+Para evitar esses problemas no futuro, defina no `.env` o mesmo UID/GID do seu usuário no host (`id -u` e `id -g`) em `PUID` e `PGID`, e reconstrua a imagem: `docker compose build --no-cache app`.
+
 ## Contributing
 
 Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
